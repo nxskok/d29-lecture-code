@@ -1,0 +1,459 @@
+---
+title: "January 16"
+output: html_document
+---
+
+## Packages
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(broom)
+```
+
+If you load MASS and tidyverse, load MASS first (both have a `select`, and we want the one in tidyverse).
+
+```{r}
+search()
+```
+
+## Some regression data (slide 50):
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/regressx.txt"
+visits=read_delim(my_url," ")
+visits
+```
+
+Try a regression and see what happens:
+
+```{r}
+visits.1=lm(timedrs~phyheal+menheal+stress,
+  data=visits)
+summary(visits.1)
+```
+
+Concentrate on intercept and slopes:
+
+```{r}
+tidy(visits.1)
+```
+
+This says that `menheal` should be removed. But it does not mean that `menheal` is 
+unimportant in any absolute sense:
+
+```{r}
+visits.2=lm(timedrs~menheal,data=visits) 
+summary(visits.2)
+```
+
+With nothing else in the regression, `menheal` is worth adding, but with other things in the regression,
+`menheal` has *nothing to add to them*. 
+
+Also compare R-squareds: with just `menheal`, is much lower than with everything.
+
+Go back to `visits.1` (best so far), and look at residuals:
+
+```{r}
+summary(visits.1)
+ggplot(visits.1,aes(x=.fitted,y=.resid))+geom_point()
+```
+
+kind of weird, and this is why:
+
+```{r}
+ggplot(visits.1, aes(sample=.resid))+stat_qq()+stat_qq_line()
+```
+
+Residuals have right-skewed distribution. What about fan-out? Look at
+absolute residuals against fitted:
+
+```{r}
+ggplot(visits.1,aes(x=.fitted,y=abs(.resid)))+
+  geom_point()+geom_smooth()
+```
+
+Fan-out *and* right-skewed residuals. This is the kind of thing a transformation will help.
+
+Go straight to Box-Cox, but:
+
+```{r}
+visits %>% count(timedrs)
+```
+
+There are 42 women who *never visited a health professional at all*. Box-Cox requires response to be positive -- 0 is no good.
+
+Idea: add 1 to make all values positive, then do Box-Cox.
+
+```{r}
+boxcox(timedrs+1~phyheal+menheal+stress,data=visits)
+```
+
+The right lambda is close to 0, but is zero actually inside CI? Zoom in by specifying lambdas to look at:
+
+```{r}
+my.lambda=seq(-0.3,0.1,0.01)
+my.lambda
+```
+
+
+```{r}
+boxcox(timedrs+1~phyheal+menheal+stress,lambda=my.lambda,
+  data=visits)
+```
+
+Zero is just inside CI, and is only "round number" that is. Looks like log.
+
+So now, fit everything, see if residuals are better:
+
+```{r}
+visits.3=lm(log(timedrs+1)~phyheal+menheal+stress, 
+            data=visits)
+summary(visits.3)
+```
+
+Before we worry about what to take out, look at residuals to see if we have form right now:
+
+```{r}
+ggplot(visits.3,aes(x=.fitted,y=.resid))+
+  geom_point()
+```
+
+and
+
+```{r}
+ggplot(visits.3, aes(sample=.resid))+stat_qq()+stat_qq_line()
+```
+
+Not perfect, but better. The diagonal lines on residual plot reflect discreteness of response variable: 0, 1, 2 visits, etc. Fan-out?
+
+```{r}
+ggplot(visits.3,aes(x=.fitted,y=abs(.resid)))+
+  geom_point()+geom_smooth()
+```
+
+Not so bad.
+
+Now think about x's to remove:
+
+```{r}
+summary(visits.3)
+```
+
+`menheal` should come out:
+
+```{r}
+visits.4=update(visits.3,.~.-menheal)
+summary(visits.4)
+```
+
+and this looks like a good model.
+
+## Punting a football (slide 76)
+
+Read in data:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/punting.txt"
+punting=read_table(my_url)
+punting
+```
+
+Predict punting distance from everything else:
+
+```{r}
+punting.1=lm(punt~left+right+fred,data=punting)
+summary(punting.1)
+```
+
+Something helps to predict punting distance, but nothing is significant?
+
+Correlations:
+
+```{r}
+cor(punting)
+```
+
+What happens if we predict punting distance from right leg strength only?
+
+```{r}
+punting.2=lm(punt~right,data=punting)
+summary(punting.2)
+anova(punting.2,punting.1)
+```
+
+No harm at all in taking the other two out. Also shows up in R-squareds:
+
+```{r}
+glance(punting.1) %>% bind_rows(glance(punting.2), .id="which")
+```
+
+almost no change, and
+
+```{r}
+summary(punting.2)
+```
+
+`right` now strongly significant. Makes more sense.
+
+One more thing: did we get relationship with `left` correct?
+
+Plot residuals from regression *without* `left`, against `left`. Any relationship needs
+to be explored:
+
+```{r}
+punting.2 %>% augment(punting) %>% 
+ggplot(aes(x=left,y=.resid))+
+  geom_point()
+
+```
+
+Up and down. Should we have a left-squared?
+
+```{r}
+punting.3=lm(punt~left+I(left^2)+right,
+  data=punting)
+summary(punting.3)
+```
+
+
+Yes we should. What was the R-squared before?
+
+```{r}
+glance(punting.2)
+```
+
+Adding left-squared is a distinct improvement.
+
+# Logistic regression
+
+slide 92
+
+## Rats part 1
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/rat.txt"
+rats=read_delim(my_url," ")
+rats
+```
+
+Fit a logistic regression without being careful:
+
+```{r}
+status.1 = glm(status~dose,family="binomial",data=rats)
+```
+
+This is because *the response variable must be a factor* (not just text that looks like one).
+
+This works:
+
+```{r}
+status.1 = glm(factor(status)~dose,family="binomial",data=rats)
+```
+
+or this:
+
+```{r}
+rats %>% mutate(fstat=factor(status)) %>% 
+  glm(fstat~dose,family="binomial",data=.) -> status.1a
+```
+
+Results:
+
+```{r}
+summary(status.1)
+```
+
+Slope is negative (but not significant).
+
+What are levels of status turned into factor?
+
+```{r}
+levels(factor(rats$status))
+```
+or
+
+```{r}
+rats %>% pull(status) %>% factor() %>% levels()
+```
+
+First one "died" is baseline; second one "lived" is what we model probability of.
+
+So negative slope means predicted probability of living goes *down* as dose increases. (Consistent with poison.)
+
+Predictions (for doses in data):
+
+```{r}
+p=predict(status.1,type="response")
+cbind(rats,p)
+```
+
+these look as if they go sharply down, but there is a lot of uncertainty. How much? See this plot (there is more in the code than I talk about):
+
+```{r}
+ilink=family(status.1)$linkinv
+p=predict(status.1, se.fit=T) # note no type=response
+p %>% as.tibble() %>% 
+  mutate(lcl=fit-2*se.fit, ucl=fit+2*se.fit) %>% 
+  mutate(lclp=ilink(lcl), fitp=ilink(fit), uclp=ilink(ucl)) %>% 
+  select(ends_with("p")) %>% bind_cols(rats) -> preds
+preds
+ggplot(preds,aes(x=dose,y=fitp, ymin=lclp, ymax=uclp))+geom_line()+
+  geom_ribbon(alpha=0.1)
+  
+```
+
+The confidence interval (grey) goes pretty much from 0 to 1 all the way along.
+
+https://www.fromthebottomoftheheap.net/2018/12/10/confidence-intervals-for-glms/
+
+## More rats
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/rat2.txt"
+rat2=read_delim(my_url," ")
+rat2
+```
+
+Now 10 rats at each dose, summarized with number living and dying at each dose. Each data line represents 10 rats, not just one. Modelling handled differently.
+
+Create a response matrix that contains two columns. First column is what is modelled (living), second column # dying:
+
+```{r}
+response=with(rat2,cbind(lived,died))
+response
+class(response)
+```
+
+An R matrix. Model thus:
+
+```{r}
+rat2.1=glm(response~dose,family="binomial",
+  data=rat2)
+summary(rat2.1)
+```
+
+Again a negative slope (P(living) decreases as dose increases), but now sig. different from zero.
+
+Now our predictions actually mean something:
+
+```{r}
+p=predict(rat2.1,type="response")
+cbind(rat2,p)
+```
+
+and we can make a plot with CIs again:
+
+```{r}
+ilink=family(rat2.1)$linkinv
+p=predict(rat2.1, se.fit=T) # note no type=response
+p %>% as.tibble() %>% 
+  mutate(lcl=fit-2*se.fit, ucl=fit+2*se.fit) %>% 
+  mutate(lclp=ilink(lcl), fitp=ilink(fit), uclp=ilink(ucl)) %>% 
+  select(ends_with("p")) %>% bind_cols(rat2) -> preds
+preds
+ggplot(preds,aes(x=dose,y=fitp, ymin=lclp, ymax=uclp))+geom_line()+
+  geom_ribbon(alpha=0.1)
+```
+
+Haven't estimated the probabilities with great precision still, but at least the trend is definitely going downhill.
+
+## The sepsis data (slide 105)
+
+The data:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/sepsis.txt"
+sepsis=read_delim(my_url," ")
+sepsis
+```
+
+Most of the variables are 0 (absent) or 1 (present): "risk factors".
+
+For `death` (response), 0 is baseline, predict probability of 1 (death) given other variables.
+
+One individual per row.
+
+Model 1:
+
+```{r}
+sepsis.1=glm(death~shock+malnut+alcohol+age+
+              bowelinf,family="binomial",
+	      data=sepsis)
+summary(sepsis.1)
+```
+
+Malnutrition not quite significant: remove:
+
+```{r}
+sepsis.2=update(sepsis.1,.~.-malnut)
+summary(sepsis.2)
+```
+
+Nothing else to remove, so this seems like a good model.
+
+Do predictions. Use original data as "new" data frame to predict from:
+
+```{r}
+sepsis.pred=predict(sepsis.2,type="response")
+d=cbind(sepsis,sepsis.pred)
+d
+```
+
+Pick out some rows to look at:
+
+```{r}
+myrows=c(4,1,2,11,32) 
+d %>% slice(myrows)
+```
+
+- no risk factors: low chance of death, but increasing with age
+- any risk factors substantially increase chance of death
+
+Residual plot:
+
+```{r}
+ggplot(augment(sepsis.2),aes(x=age,y=.resid))+
+  geom_point()
+```
+
+Residuals are weird because each patient either dies or not.
+String of points starting at 0 and going gradually down are people with no risk factors who lived.
+
+Investigate the coefficients again:
+
+```{r}
+sepsis.2.tidy=tidy(sepsis.2)
+sepsis.2.tidy
+```
+
+Coefficients denote change in log-odds for 1 vs 0 (or for 1 additional year of age), all else equal.
+
+Anti-logging these will give multiplicative change in odds:
+
+```{r}
+sepsis.2.tidy %>% select(term, estimate) %>% 
+  mutate(exp_estimate=round(exp(estimate),2))
+```
+
+Having shock vs. not multiplies odds of death by over 40! Alcoholism and bowel infarction also have large effects on odds of death.
+
+Age effect looks small, but this is per year. Over, say, 40 years it would be
+
+```{r}
+1.09^40
+```
+
+so effect of being 40 years older is about the same as for the other risk factors.
+
+## probability and odds: see slide 115
+
+## Playing with odds ratios and relative risks
+
+
+## ------------------------------------------------------------------------
+(od1=0.02/0.98)
+(od2=0.01/0.99)
+
+## ------------------------------------------------------------------------
+od1/od2 

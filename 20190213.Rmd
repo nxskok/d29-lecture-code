@@ -1,0 +1,495 @@
+---
+title: "February 6"
+output: html_notebook
+---
+
+# Packages
+
+```{r}
+library(car) # for Levene's test
+library(tidyverse)
+library(broom)
+library(smmr) # to compare with ANOVA results
+```
+
+Intro: see slide 205
+
+# A review example
+
+See slides 207-208.
+
+## The data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/hairpain.txt"
+hairpain=read_delim(my_url, " ")
+hairpain
+```
+
+Summary of means and SDs
+
+```{r}
+hairpain %>% group_by(hair) %>%
+summarize( n=n(),xbar=mean(pain),s=sd(pain))
+```
+
+Boxplot
+
+```{r}
+ggplot(hairpain,aes(x=hair,y=pain))+geom_boxplot()
+```
+
+We have some potential problems with outliers and unequal spreads.
+
+But brown-haired people seem to have less pain tolerance on average.
+
+Are those spreads really unequal?
+
+```{r}
+leveneTest(pain~hair,data=hairpain)
+```
+
+absolutely not! (Potential problem with small groups and testing for variance.)
+
+## Analysis
+
+ANOVA:
+
+```{r}
+hairpain.1=aov(pain~hair,data=hairpain)
+summary(hairpain.1)
+```
+
+There are differences in pain tolerance among the hair types. To find out which:
+
+```{r}
+TukeyHSD(hairpain.1)
+```
+
+Light blond has significantly greater pain tolerance than light brown or dark brown.
+
+Slide 216.
+
+## Mood's median test
+
+Does `smmr` give same results, based on Mood's median test?
+
+```{r}
+median_test(hairpain, pain, hair)
+```
+
+Hmm, not quite significant at $\alpha=0.05$.
+
+```{r}
+pairwise_median_test(hairpain, pain, hair)
+```
+
+No significant differences here at all.
+
+## Issues
+
+- different conclusions cause concern.
+- maybe ANOVA not to be trusted because of unequal spreads/outliers (despite Levene's test)
+- maybe Mood lacks power because of small sample sizes. 
+
+# Two-factor ANOVA
+
+# Data: rats and vitamin B
+
+Slide 222 for background.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/vitaminb.txt"
+vitaminb=read_delim(my_url," ")
+vitaminb
+```
+
+Kidney weight (response) depends on 2 factors rat size and diet.
+
+## Grouped boxplot
+
+```{r}
+ggplot(vitaminb,aes(x=ratsize, y=kidneyweight, fill=diet))+geom_boxplot()
+```
+
+Size: Lean rats have much smaller kidney weight than obese ones.
+Diet: difference is very small, maybe not significant.
+
+## Group means
+
+```{r}
+summary = vitaminb %>% group_by(ratsize,diet) %>%
+  summarize(mean=mean(kidneyweight))
+summary
+```
+
+Almost same story as boxplot. Diet effect small (or non-existent).
+
+## Interaction plot
+
+With two factors, effect of one (eg. diet) on response may be different according to other factor (size), eg. one diet may be better for lean rats, and the other for obese rats.
+
+To understand this, plot mean of response against one explanatory, with points joined by lines according to other. Need both `colour` and `group`:
+
+```{r}
+ggplot(summary,aes(x=diet, y=mean, colour=ratsize, group=ratsize))+
+  geom_point()+geom_line()
+```
+
+
+The two lines are more or less parallel, indicating no interaction. 
+
+I could also draw it like this:
+
+```{r}
+ggplot(summary,aes(x=ratsize, y=mean, colour=diet, group=diet))+
+  geom_point()+geom_line()
+```
+
+
+Two lines almost the same (almost no diet effect).
+
+## ANOVA 
+
+Include *interaction*, to allow for possibility that effect of diet is different for lean and obese rats.
+
+```{r}
+vitaminb.1=aov(kidneyweight~ratsize*diet, data=vitaminb)
+summary(vitaminb.1)
+```
+
+Interaction is *not* significant. Effect of diet is same for both sizes of rat.
+
+STOP HERE. Remove interaction before concluding anything else.
+
+```{r}
+vitaminb.2=update(vitaminb.1,.~.-ratsize:diet)
+summary(vitaminb.2)
+```
+
+Now interpret the main effects: size makes a difference but diet does not. If you like, remove diet as well:
+
+```{r}
+vitaminb.3=update(vitaminb.2,.~.-diet)
+summary(vitaminb.3)
+```
+
+There were only two sizes, so one of them must have bigger kidneys than the other:
+
+```{r}
+summary
+```
+
+The obese rats have bigger kidneys, but the diet has no effect.
+
+# Auto noise data
+
+Slide 230 for background.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/autonoise.txt"
+autonoise=read_table(my_url)
+autonoise
+```
+
+Two explanatory factors `size` and `type` (ignore `side`). What is effect of each and do they interact?
+
+## Grouped boxplot
+
+```{r}
+ggplot(autonoise, aes(x=size,y=noise,fill=type))+
+   geom_boxplot()
+```
+
+Octel filter seems to have equal or less noise on average, with difference for medium engines.
+
+Compare:
+
+```{r}
+ggplot(autonoise, aes(x=type,y=noise,fill=size))+
+   geom_boxplot()
+```
+
+I like having more smaller groups (use as `x` the categorical variable with more categories).
+
+## Interaction plot
+
+Two ways.
+
+(i) compute means and pipe into plot:
+
+```{r}
+autonoise %>% group_by(type, size) %>% 
+  summarize(mean_noise=mean(noise)) %>% 
+  ggplot(aes(x=size, y=mean_noise, colour=type, group=type))+
+    geom_point()+geom_line()
+```
+
+Not parallel: expect interaction.
+
+(ii) have ggplot compute means for us:
+
+```{r}
+ggplot(autonoise,aes(x=size,y=noise,
+  colour=type,group=type))+
+  stat_summary(fun.y=mean,geom="point")+
+  stat_summary(fun.y=mean,geom="line")
+```
+
+Same plot, but uses *original* data and *computes* means by group.
+
+Variation: plot original data as points instead:
+
+```{r}
+autonoise %>% group_by(type, size) %>% 
+  summarize(mean_noise=mean(noise)) %>% 
+  ggplot(aes(x=size, y=mean_noise, colour=type, group=type))+
+    geom_line()+
+    geom_point(data=autonoise, aes(y=noise))
+```
+
+
+## ANOVA
+
+Include interaction term:
+
+```{r}
+autonoise.1=aov(noise~size*type,data=autonoise)
+summary(autonoise.1)
+```
+
+Interaction is significant. That is our finding: effect of filter type is different for different engine sizes.
+
+How? Tukey?
+
+```{r}
+TukeyHSD(autonoise.1)
+```
+
+ouch!
+
+## Simple effects
+
+Comparing eg. large engine, standard filter vs medium engine, Octel filter not what we really care about.
+
+Interested in comparing the two filters on the *same* size engine.
+
+That is, look only at engines of a certain size, and see whether there is an effect of filter type for those engines. 
+
+Called *simple effects* of filter type for each engine size.
+
+Expect: simple effect of filter type for Medium engines to be significant, for other engines not to be.
+
+Procedure: extract only data of required engine size, do *1-way ANOVA* of noise on filter type, interpret.
+
+Small engines first:
+
+```{r}
+autonoise %>% filter(size=="S") %>% 
+  aov(noise~type, data=.) -> autonoise.2a
+summary(autonoise.2a)
+```
+
+No significant difference. Medium engines?
+
+```{r}
+autonoise %>% filter(size=="M") %>% 
+  aov(noise~type, data=.) -> autonoise.2b
+summary(autonoise.2b)
+```
+
+Strongly significant. Which way?
+
+```{r}
+TukeyHSD(autonoise.2b)
+```
+
+Noise is higher for Standard filters than Octel ones.
+
+Large engines?
+
+```{r}
+autonoise %>% filter(size=="L") %>% 
+  aov(noise~type, data=.) -> autonoise.2c
+summary(autonoise.2c)
+```
+
+No significant difference again.
+
+These three are exactly what we expected: Octel filters never have more noise than Standard ones, and sometimes have less. This is what the President of Texaco wanted to show.
+
+## All at once
+
+```{r}
+autonoise %>% group_by(size) %>%  nest()
+```
+
+`data` contains all the rest of the data apart from size.
+
+"For each thing in `data`, run `aov` predicting noise from type":
+
+```{r}
+autonoise %>% group_by(size) %>%  nest() %>% 
+  mutate(aovs=map(data, ~aov(noise~type, data=.)))
+```
+
+How to get at the P-value? 
+
+```{r}
+glance(autonoise.2a)$p.value
+```
+
+so
+
+```{r}
+autonoise %>% group_by(size) %>%  nest() %>% 
+  mutate(aovs=map(data, ~aov(noise~type, data=.))) %>% 
+  mutate(pval=map_dbl(aovs, ~glance(.)$p.value))
+```
+
+or
+
+```{r}
+autonoise %>% group_by(size) %>%  nest() %>% 
+  mutate(aovs=map(data, ~aov(noise~type, data=.))) %>% 
+  mutate(glancing=map(aovs, ~as_tibble(glance(.)))) %>% 
+  unnest(glancing)
+```
+
+## Story for 2-factor ANOVA:
+
+- draw grouped boxplot as visual
+- compute means of response for group combinations
+- draw interaction plot, assess for interaction
+- aov with interaction:
+- if interaction not significant:
+  - remove interaction, refit
+  - assess main effects of factors (including Tukey)
+- if interaction significant
+  - there is no single effect of each factor; they act in combination
+  - can use simple effects to assess effect of one factor at each level of the other
+
+# Contrasts in ANOVA
+
+Slide 255.
+
+## Data: chainsaw kickback
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/chainsaw.txt"
+chain.wide=read_table(my_url)
+chain.wide
+```
+
+Tidy:
+
+```{r}
+chain=gather(chain.wide, chainsaw, kickback, everything(), factor_key=T)
+chain
+```
+
+Note that `chainsaw` is a `factor` (which we will need).
+
+What are the chainsaws, in order?
+
+```{r}
+chain %>% count(chainsaw)
+```
+
+## Contrasts
+
+Want to compare (only):
+
+1. home chainsaws A and D with industrial ones B and C
+2. two home chainsaws A and D with each other
+3. two industrial chainsaws B and C with each other
+
+Other comparisons not of interest.
+
+See slides 258-259.
+
+Create vectors with coefficients that represent what you want to compare with what.
+
+Eg. contrast 2 looks like this:
+
+```{r}
+c2=c(1,0,0,-1)
+```
+
+and contrast 3:
+
+```{r}
+c3=c(0,1,-1,0)
+```
+
+Things that don't appear in a contrast should be zero, and things compared with each other should be of opposite signs and the same size.
+
+Contrast 1 is "average of A and D vs. average of B and C", thus:
+
+```{r}
+c1=c(1/2, -1/2, -1/2, 1/2)
+```
+
+So far we have:
+
+```{r}
+c1
+c2
+c3
+```
+
+If you elementwise-multiply contrasts 2 and 3 together and add up, you get zero:
+
+```{r}
+sum(c2*c3)
+```
+
+These two contrasts are called *orthogonal*. We only learn how to deal with orthogonal contrasts.
+In fact `c1` is orthogonal to the others as well:
+
+```{r}
+sum(c1*c2)
+sum(c1*c3)
+```
+
+## Setting up contrasts
+
+- arrange into matrix with `cbind`
+- tell `lm` that you want to use these contrasts
+
+```{r}
+m=cbind(c1, c2, c3)
+m
+```
+
+```{r}
+contrasts(chain$chainsaw)=m
+```
+
+## Fit as `lm`
+
+Then fit ANOVA *as `lm`* and look at `summary`:
+
+```{r}
+chain.1=lm(kickback~chainsaw,data=chain)
+summary(chain.1)
+```
+
+## Conclusions
+
+The lines `chainsawc1` through `chainsawc3` are the tests for the three contrasts 1 through 3:
+
+1. The home models and industrial models differ significantly in kickback.
+2. The two home models do not differ significantly in kickback (from each other)
+3. The two industrial models do not differ significantly in kickback (from each other).
+
+To understand 1, we can compute means:
+
+```{r}
+chain %>% group_by(chainsaw) %>% 
+  summarize(m=mean(kickback))
+```
+
+The two industrial models B and C have *greater* kickback than the home models A and D, which makes sense because in an industrial setting, users would get training to handle the chainsaw safely. 
+
+This is all we needed to test, so we are done.

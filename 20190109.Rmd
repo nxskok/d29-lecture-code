@@ -1,0 +1,337 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Packages
+
+```{r}
+library(MASS) # for Box-Cox, later
+library(tidyverse)
+library(broom)
+```
+
+
+## The sleep data
+
+Read in and check
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/sleep.txt"
+sleep=read_delim(my_url," ")
+sleep
+```
+
+Two quantitative variables: scatterplot
+
+```{r}
+ggplot(sleep,aes(x=age,y=atst))+geom_point()
+```
+
+
+
+Correlation, two ways:
+
+just the correlation as a number
+
+
+```{r}
+with(sleep,cor(atst,age))
+```
+
+Correlation matrix
+
+```{r}
+cor(sleep)
+```
+
+shows correlation of each pair of variables (including variables with themselves: 1)
+
+Add a smooth trend to the scatterplot
+
+```{r}
+ggplot(sleep,aes(x=age,y=atst))+geom_point()+
+  geom_smooth()
+```
+
+This looks pretty straight. Fit a regression.
+
+```{r}
+sleep.1=lm(atst~age,data=sleep) 
+summary(sleep.1)
+```
+
+Note:
+
+- high R-squared (regression fits well)
+- low P-values for slope and on F-test (a straight line fits way better than chance)
+- slope for `age` negative, so as age goes up, average total sleep time goes down.
+
+`summary` output for looking at, but hard to do anything else with. Package `broom` produces data frame output so
+can do with it whatever we can do with data frames.
+
+To look:
+
+```{r}
+glance(sleep.1) 
+```
+
+One-line summary of whole model, including R-squared, F-statistic and its P-value.
+
+```{r}
+tidy(sleep.1)
+```
+
+Table of intercept/slopes including their values and P-values.
+
+Eg. just the `age` line:
+
+```{r}
+tidy(sleep.1) %>% filter(term=="age")
+```
+
+or just the term and p-value columns:
+
+```{r}
+tidy(sleep.1) %>% select(term, p.value)
+```
+
+To add regression quantities to original data:
+
+```{r}
+sleep.1 %>% augment(sleep)
+```
+
+this permits eg. plots of residuals against x's:
+
+```{r}
+sleep.1 %>% augment(sleep) %>% 
+  ggplot(aes(x=age, y=.resid))+geom_point()
+```
+
+which looks pretty random.
+
+## Predictions for the sleep data
+
+Predict average total sleep time for ages 5 and 10.
+
+First, create data frame with column called `age` with the values we want to predict for.
+
+```{r}
+my.age=c(10,5)
+ages.new=tibble(age=my.age)
+ages.new
+```
+
+Two types of prediction in regression (slide 25).
+
+Confidence interval for mean response
+
+```{r}
+pc=predict(sleep.1,ages.new,interval="c")
+pc
+cbind(ages.new,pc)
+```
+
+Prediction interval for response of new observation
+
+```{r}
+pp=predict(sleep.1,ages.new,interval="p")
+cbind(ages.new,pp)
+```
+
+Put these next to the data they're predictions for:
+
+```{r}
+cbind(ages.new,pc)
+```
+
+and
+
+```{r}
+cbind(ages.new,pp)
+```
+
+That grey envelope on a plot with fitted line:
+
+```{r}
+ggplot(sleep,aes(x=age,y=atst))+geom_point()+
+  geom_smooth(method="lm")
+```
+
+Let's tweak the y-scale so we can see what that "envelope" is:
+
+```{r}
+ggplot(sleep,aes(x=age,y=atst))+geom_point()+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=seq(420,600,20)) 
+```
+
+At age 5, from about 560 to 590
+At age 10, from about 497 to 515.
+
+These are the confidence interval for the mean response (of all children aged 5, 10 respectively).
+
+Technical note: what kind of things are those predictions?
+
+```{r}
+pc
+```
+
+```{r}
+class(pc)
+```
+
+Before we used `cbind` that works with matrices:
+
+```{r}
+cbind(ages.new, pc)
+```
+
+This does not work, because `pc` is not a data frame:
+
+```{r}
+bind_cols(ages.new, pc)
+```
+
+Alternatively, make `pc` into a tibble and then use `tidyverse` tools:
+
+```{r}
+as_tibble(pc) %>% bind_cols(ages.new)
+```
+
+
+
+Last, residual plot (vs fitted values):
+
+```{r}
+ggplot(sleep.1,aes(x=.fitted,y=.resid))+geom_point()
+```
+
+No patterns here. Good.
+
+## A bad data set
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/curvy.txt"
+curvy=read_delim(my_url," ")
+curvy
+```
+
+Make a scatterplot:
+
+```{r}
+ggplot(curvy,aes(x=xx,y=yy))+geom_point()
+```
+
+not linear! Increases and then levels off.
+
+A straight line should be bad, but try one anyway:
+
+```{r}
+curvy.1=lm(yy~xx,data=curvy) 
+summary(curvy.1)
+```
+
+this looks not so bad: moderately high R-squared and significantly positive slope. But:
+
+```{r}
+ggplot(curvy.1,aes(x=.fitted,y=.resid))+geom_point()
+```
+
+curved, so original relationship curved. Try adding an x-squared term. Two ways to get to the same place:
+
+```{r}
+curvy.2=lm(yy~xx+I(xx^2),data=curvy)
+curvy.2a=update(curvy.1,.~.+I(xx^2))
+```
+
+with results (`summary(curvy.2a)` same):
+
+```{r}
+summary(curvy.2)
+```
+
+R-squared is much improved, and squared term is strongly significant (worth adding).
+
+How are the residuals?
+
+```{r}
+ggplot(curvy.2,aes(x=.fitted,y=.resid))+geom_point()
+```
+
+Not curved any more, at least.
+
+Scatterplot with fitted curve? Uses values from original data plus regression, so use `augment` to create data frame with both:
+
+```{r}
+curvy.2 %>% augment(curvy)
+```
+
+and then
+
+```{r}
+curvy.2 %>% augment(curvy) %>% 
+  ggplot(aes(x=xx, y=yy))+geom_point()+
+  geom_line(aes(y=.fitted))
+```
+
+this is a definite improvement over the line.
+
+## Box and Cox (see slide 40)
+
+Uses package `MASS`.
+
+Some more data:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/madeup.csv"
+madeup=read_csv(my_url)
+madeup
+```
+
+Scatterplot:
+
+```{r}
+ggplot(madeup,aes(x=x,y=y))+geom_point()+
+  geom_smooth()
+```
+
+This looks like faster-than-linear growth. Idea: find a transformation of the response that makes this straighter.
+
+```{r}
+boxcox(y~x,data=madeup)
+```
+
+- Lambda is power to transform $y$ by, with 0 having special meaning of "take logs".
+- Anything within the confidence interval (outer dotted lines) supported by data: -0.25 to 0.75 or so. 
+- Choose a "round" value for lambda.
+- Here log or square root (power 0.5) could be justified.
+- Try log here.
+
+Make a plot: is relationship between log(y) and x straighter?
+
+```{r}
+madeup %>% mutate(log_y=log(y)) %>% 
+  ggplot(aes(x=x,y=log_y))+geom_point()
+```
+
+
+```{r}
+ggplot(madeup, aes(x=x, y=log(y)))+geom_point()+geom_smooth()
+```
+
+Looks straighter (not obviously curved). So try regression predicting log(y) from x:
+
+```{r}
+madeup.1=lm(log(y)~x, data=madeup)
+summary(madeup.1)
+```
+
+R-squared high, slope significantly positive. How are the residuals?
+
+```{r}
+ggplot(madeup.1, aes(x=.fitted, y=.resid))+geom_point()
+```
+
+The fourth point (with fitted value 4.5) looks like an outlier now. If this were real data, we would investigate this observation further.

@@ -1,0 +1,353 @@
+---
+title: "January 30"
+output: html_notebook
+---
+
+Intro: slide 167-169
+
+# Packages
+
+Install any of these that you don't have already:
+
+```{r}
+options(tidyverse.quiet=T) # no messages!
+library(tidyverse)
+library(survival) # for analysis
+library(survminer) # for graphs
+```
+
+# Dancing data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/dancing.txt"
+dance=read_table(my_url)
+dance
+```
+
+- Does time spent dancing before quitting depend on treatment (visit to dance competition) or age?
+- Some of the women quit dancing at the #months shown (`quit=1`), some were still dancing the last we 
+knew (`quit=0`).
+
+- Event of interest "quit dancing"
+- Women who were never observed to quit called "censored".
+
+- Model has to accommodate censored individuals: there is information there, particularly if observed a 
+long time and event still hasn't happened.
+
+## Modelling and response variable
+
+Response variable first:
+
+```{r}
+mth=with(dance,Surv(Months,Quit==1))
+mth
+```
+
+```{r}
+dance %>% mutate(y=mth)
+```
+
+
+```{r}
+cbind(mth, dance)
+```
+
+that thing `mth`:
+
+```{r}
+print.default(mth)
+```
+
+*actually* has two columns, so that this doesn't work:
+
+```{r}
+dance %>% mutate(mth=mth)
+```
+
+## Cox proportional-hazards model 
+
+predict "survival time" (time until quitting dancing) from treatment and age, allowing for fact
+that some women never observed to quit. 
+
+We use $\alpha=0.10$, since data set is small.
+
+```{r}
+dance.1=coxph(mth~Treatment+Age,data=dance)
+summary(dance.1)
+```
+
+Tests at bottom: *something* predicts time until quitting dancing.
+
+Both treatment and age have a significant effect at $\alpha=0.10$. What kind of effect? Later.
+
+## Model checking
+
+"Martingale residuals": look for no pattern with fitted values.
+
+```{r}
+ggcoxdiagnostics(dance.1)
+```
+
+Average residual is zero all way across: no problem.
+
+Martingale residuals can go very negative, so don't look at normal quantile plot of them.
+
+## Predictions
+
+To understand effect of age and treatment, do predictions and plot them.
+
+Combos of age 20 and 40, dance competition and not (1 and 0):
+
+```{r}
+ages=c(20,40)
+treatments=c(0,1)
+new=crossing(Treatment=treatments, Age=ages)
+View(new)
+```
+
+In a regression, run `predict`. In survival analysis, run `survfit`:
+
+```{r}
+s=survfit(dance.1,new,data=dance) # model, new data, original data
+summary(s)
+```
+
+the four columns `survival` are the four combinations in the order they were in `new`.
+
+Easier: make a graph:
+
+```{r}
+ggsurvplot(s,conf.int=F)
+```
+
+It is better to have a higher chance of continuing to dance for longer (at least if you own a dance studio!) So being up and to the right is better (purple and not red).
+
+Which of the strata is which? Same order as in `new`:
+
+```{r}
+new
+```
+
+Purple stratum is #4, treatment 1 (going to dance comp) and age 40. These women continue to dance for longest.
+
+Age effect is that older women continue to dance for longer, keeping treatment fixed (green better than red, purple better than  blue).
+
+Treatment effect is that women who go to the dance competition continue to dance for longer, keeping age fixed (blue better than red, purple better than green).
+
+Go back to `summary` output:
+
+```{r}
+summary(dance.1)
+```
+
+The coefficients are on the scale of "hazard of event": if positive, makes the event more likely to happen sooner, if negative, event is less likely to happen sooner (more likely to take a long time).
+
+Here, coefficients are both negative. That means:
+
+- a woman who goes to the dance competition is less likely to quit soon (more likely to dance for a long time)
+- a woman who is older is less likely to quit soon (more likely to dance longer).
+
+
+# Lung cancer example
+
+The variables: slide 183, all quantitative (except for `inst`, a label, and `status`, `sex`, categorical variables with 2 levels treated as numbers).
+
+```{r}
+lung
+```
+
+## Remove missing values
+
+There are missing values. How many?
+
+```{r}
+summary(lung)
+```
+
+Some variables have a lot.
+
+Get rid of cases with missing values
+
+```{r}
+(lung %>% drop_na() -> lung.complete)
+```
+
+Any missing values left?
+
+```{r}
+summary(lung.complete)
+```
+
+No. We are good.
+
+## Create response variable and fit Cox model
+
+Create response variable. Use `time` (survival time) and `status`. Check data description to see that 2 means "event happened" (death). These times are days.
+
+```{r}
+y=with(lung.complete, Surv(time, status==2))
+y
+```
+
+As a check, usually the longer survival times go with survival/censoring:
+
+```{r}
+ggplot(lung.complete, aes(x=factor(status), y=time))+geom_boxplot()
+```
+
+1 was lived, 2 was died.
+
+## Cox model
+
+`inst` is label for "institution", ignore. 
+
+To start, use all the other variables we haven't used as explanatory.
+This means using everything except `inst`, `time`, `status`.
+
+```{r}
+lung.1=coxph(y~.-inst-time-status, data=lung.complete)
+summary(lung.1)
+```
+
+There are some significant variables and some non-significant ones.
+
+Suggests `step` with backward elimination to get a better model:
+
+```{r}
+lung.2=step(lung.1, test="Chisq",trace=1)
+```
+
+```{r}
+summary(lung.2)
+```
+
+I make the call that I'm only going to keep `sex` and `ph.ecog` and take out the other three:
+
+```{r}
+lung.3=update(lung.2, .~.-ph.karno-pat.karno-wt.loss)
+summary(lung.3)
+```
+
+Interpretation:
+- a larger `sex` number (female=2) is less likely to die sooner
+- a larger score on `ph.ecog` scale means *more* likely to die sooner.
+
+## Should I have taken out all those variables?
+
+```{r}
+anova(lung.3, lung.1)
+```
+
+yes, I was justified in removing them all.
+
+## Predictions and graph
+
+Make combinations of sexes and `ph.ecog` scores:
+
+```{r}
+sexes=c(1,2)
+ph.ecogs=0:3
+lung.new=crossing(sex=sexes,ph.ecog=ph.ecogs)
+View(lung.new)
+```
+
+Predict:
+
+```{r}
+s=survfit(lung.3, lung.new, data=lung.complete)
+```
+
+Plot them:
+
+```{r}
+ggsurvplot(s,conf.int=F)
+```
+
+Best survival is light blue curve, stratum 5: females with `ph.ecog` score 0.
+
+Worst survival is green curve, stratum 4: males with `ph.ecog` score 3.
+
+Effect of `ph.ecog` score: compare eg. for females, strata 5 through 8: light blue, dark blue, purple, pink: increasing score associated with worse survival.
+
+Effect of `sex`: compare eg. strata 1 (males, red) and 5 (females, light blue): females have better survival.
+
+```{r}
+summary(lung.3)
+```
+
+
+## Martingale residuals
+
+```{r}
+ggcoxdiagnostics(lung.3)
+```
+
+Grey envelope includes 0 all the way across, so I call this good.
+
+# When the Cox model fails
+
+Invent some data:
+
+```{r}
+age=seq(20,60,5)
+survtime=c(10,12,11,21,15,20,8,9,11)
+stat=c(1,1,1,1,0,1,1,1,1)
+d=tibble(age,survtime,stat)
+y=with(d,Surv(survtime,stat==1))
+cbind(y,d)
+```
+
+Survival time 15 was actually censored, so would have been larger if survival time observed.
+
+Fit model:
+
+```{r}
+y.1=coxph(y~age,data=d)
+summary(y.1)
+```
+
+Model and effect of age *not significant*.
+
+Look at martingale residual plot:
+
+```{r}
+ggcoxdiagnostics(y.1)
+```
+
+Down and up quadratic trend. Suggests adding squared term in age:
+
+```{r}
+y.2=coxph(y~age+I(age^2),data=d)
+summary(y.2)
+```
+
+Squared term almost significant, and
+
+```{r}
+ggcoxdiagnostics(y.2)
+```
+
+martingale residual plot improved.
+
+What do predictions look like?
+
+```{r}
+new=tibble(age=seq(20,60,10))
+new
+```
+
+```{r}
+s=survfit(y.2, new, data=d)
+```
+
+```{r}
+ggsurvplot(s,conf.int=F)
+```
+
+```{r}
+new
+```
+
+Best survival associated with stratum 3, middling age 40.
+
+Much worse survival for two extreme ages 20 and 60.

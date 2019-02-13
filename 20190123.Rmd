@@ -1,0 +1,442 @@
+---
+title: "January 23"
+output: html_notebook
+---
+
+## Packages
+
+```{r}
+library(MASS)
+library(tidyverse)
+library(nnet) # for multinom later
+```
+
+
+## Ordered responses
+
+See slides 120 and 121.
+
+### The data
+
+The miners data:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/miners-tab.txt"
+freqs=read_table(my_url)
+freqs
+```
+
+### Long format and a plot
+
+Making long format and proportions
+
+```{r}
+freqs %>% gather(Severity, Freq, -Exposure) %>%
+group_by(Exposure) %>%
+mutate(proportion=Freq/sum(Freq)) -> miners
+miners
+```
+
+plot proportions against exposure
+
+```{r}
+ggplot(miners,aes(x=Exposure,y=proportion,
+colour=Severity))+geom_point()+geom_line()
+```
+
+### Re-ordering the categories
+
+but, categories in *wrong order*!
+
+in *data frame*, severity categories in *correct* order:
+
+```{r}
+miners
+```
+
+so create a factor with levels in *that* order. Use `fct_inorder` from `forcats` (part of `tidyverse`):
+
+```{r}
+miners %>%
+mutate(sev_ord=fct_inorder(Severity)) -> miners
+```
+
+```{r}
+miners
+```
+
+
+Did that work?
+
+
+```{r}
+levels(miners$sev_ord)
+```
+
+### A more sensible plot
+
+better plot:
+
+```{r}
+ggplot(miners,aes(x=Exposure,y=proportion,
+colour=sev_ord))+geom_point()+geom_line()
+```
+
+so it looks as if severity of disease does depend on exposure.
+
+### Fitting a model
+
+To model, use "proportional odds logistic regression", thus. `weights` is how to say
+that each row represents several people:
+
+```{r}
+sev.1=polr(sev_ord~Exposure, weights=Freq, data=miners)
+```
+
+the output doesn't say much:
+
+```{r}
+sev.1
+```
+
+we'll investigate using predictions later.
+
+### Testing effect of exposure
+
+Does exposure have an effect? The obvious way:
+
+```{r}
+drop1(sev.1, test="Chisq")
+```
+
+This also works (but is a bit longer):
+- fit a model without exposure
+- use `anova` to compare models with and without:
+
+```{r}
+sev.2=update(sev.1, .~.-Exposure)
+anova(sev.2,sev.1)
+```
+
+Same test and save result: exposure matters. 
+
+### Predictions and another plot
+
+To understand what the model is saying, *make predictions* for various exposures. Which exposures?
+Look back at original dataframe:
+
+```{r}
+freqs
+```
+
+The ones in column called `Exposure` here would be good.
+
+```{r, error=F}
+#pr=predict(sev.1, freqs, type="bananas")
+```
+
+probs, then:
+
+```{r}
+pr=predict(sev.1, freqs, type="probs")
+(miners.pred=cbind(freqs, pr))
+```
+
+we got repeated column names. Let's rename the ones that came from `freqs`:
+
+```{r}
+pr=predict(sev.1, freqs, type="probs")
+(miners.pred=cbind(f=freqs, pr))
+```
+
+
+Want to plot these, so need all the predicted probabilities in one column:
+
+```{r}
+miners.pred %>% select(Exposure=f.Exposure, None:Severe) %>% 
+  gather(Severity, probability, -Exposure) %>% 
+  mutate(sev_ord=fct_inorder(Severity)) -> preds
+preds
+```
+
+When we made our first plot, we got this:
+
+```{r}
+miners
+```
+
+Let's match them on what they match on, to make one data frame with everything needed for plot of data and predictions:
+
+```{r}
+(preds %>% left_join(miners) -> plot_stuff)
+```
+
+All right, plot:
+- proportion vs exposure as points
+- probability vs exposure joined by lines
+- severity categories distinguished by colour
+
+```{r}
+ggplot(plot_stuff, aes(x=Exposure, y=proportion, colour=sev_ord)) + 
+  geom_point()+
+  geom_line(aes(y=probability))
+```
+
+The curves match the points pretty well, suggesting that the model is doing a good job of fitting the data.
+
+Technical note: the y-variable for the points and the lines is different, so the `geom_line` has an extra `aes` in it 
+with the new y. (The x and the colour is the same, so don't say those again.) 
+
+## Unordered responses
+
+When the response categories are not ordered (they are just labels), we have to fit using "generalized logits",
+using `multinom` from package `nnet`. 
+
+Example: 735 people, record age, sex and brand of some product preferred:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/mlogit.csv"
+brandpref=read_csv(my_url)
+brandpref
+```
+
+Data are one row per individual (even though a lot of individuals might have same age/sex combo).
+
+Brand and sex really ought to be categorical: 
+
+```{r}
+brandpref %>% 
+  mutate(sex=ifelse(sex==1, "female", "male")) %>% 
+  mutate(brand=factor(brand)) -> brandpref
+brandpref
+```
+
+Calculating the mean brand should be impossible now:
+
+```{r}
+brandpref %>% summarize(m=mean(brand))
+```
+
+
+How many males and females do we have?
+
+```{r}
+brandpref %>% count(sex)
+```
+
+how many preferences for each brand?
+
+```{r}
+brandpref %>% count(brand)
+```
+
+Fit a model:
+
+```{r}
+brand.1=multinom(brand~age+sex, data=brandpref)
+```
+
+```{r}
+summary(brand.1)
+```
+
+Lots of coefficients but not much insight.
+
+What can we drop?
+
+```{r}
+drop1(brand.1)
+```
+
+Oh. All right then. Fit models without `sex` and `age` and compare them for fit with `anova`:
+
+```{r}
+brand.2=update(brand.1,.~.-sex)
+brand.3=update(brand.1,.~.-age)
+```
+
+then
+
+```{r}
+anova(brand.2,brand.1)
+```
+
+Taking `sex` out is a mistake. And:
+
+```{r}
+anova(brand.3,brand.1)
+```
+
+taking `age` out is a definite mistake.
+
+This, mysteriously, works, and gives effectively the same conclusion:
+
+```{r}
+step(brand.1, trace=2)
+```
+
+I can't make it do a test.
+
+### Predictions
+
+Make combination of various ages and sexes:
+
+```{r}
+ages=c(24,28,32,35,38)
+sexes=c("female", "male")
+new=crossing(age=ages,sex=sexes)
+new
+```
+
+Predict:
+
+```{r}
+p=predict(brand.1,new,type="probs")
+probs=cbind(new,p)
+probs
+```
+
+What is effect of age? Concentrate on females:
+
+```{r}
+probs %>% filter(sex=="female")
+```
+
+Young people prefer brand 1. Older people prefer brand 3. People with age in the middle prefer brand 2.
+
+The pattern is similar for males:
+
+```{r}
+probs %>% filter(sex=="male")
+```
+
+What is difference between males and females? Pick an age, say 32:
+
+```{r}
+probs %>% filter(age==32)
+```
+
+At this age, females like brand 2 more and brand 1 less. What about younger people?
+
+```{r}
+probs %>% filter(age==24)
+```
+
+At this age, almost everyone likes brand 1, but still same pattern: females like brand 2 more and brand 1 less. 
+
+### Making a plot
+
+```{r}
+probs
+```
+
+Above data frame not tidy, so do that first:
+
+```{r}
+(probs %>% gather(brand, probability, `1`:`3`) -> probs.long)
+```
+
+We have *four* variables: age and probability (quantitative), sex and brand preferred (categorical).
+
+Idea: plot probability against age, distinguishing brand by colour and gender by symbol shape and line type.
+
+
+
+Now breathe, and make the plot:
+
+```{r}
+ggplot(probs.long, aes(x=age, y=probability, colour=brand, shape=sex, linetype=sex))+
+  geom_point()+geom_line()
+```
+
+### Alternative data format
+
+There were this many people in our data set:
+
+```{r}
+nrow(brandpref)
+```
+
+It seems likely that there is more than one person of each age-sex-brand combination. 
+Can we summarize the data with frequencies for each combination?
+
+```{r}
+brandpref
+(brandpref %>% count(age, sex, brand) -> b)
+```
+
+This summarizes same data in 65 rows, but now each row is (possibly) more than one person.
+
+How is this incorporated into modelling? Add a `weights` to `multinom` with name of column containing frequencies:
+
+```{r}
+b.1=multinom(brand~age+sex, data=b, weights=n)
+```
+
+Test for sex difference:
+
+```{r}
+b.2=update(b.1,.~.-sex)
+anova(b.2,b.1)
+```
+
+Exactly as before.
+
+### Making a plot with data and predictions
+
+```{r}
+b
+```
+
+On the plot, put proportions of people of each age-sex combo that preferred each brand, which we have to work out first:
+
+```{r}
+b %>% group_by(age, sex) %>% 
+  mutate(total=sum(n)) %>% 
+  mutate(proportion=n/total) -> bb
+bb
+```
+
+Take previous plot and:
+
+- remove geom_point for predictions
+- add proportions above as points
+
+gives
+
+```{r}
+ggplot(probs.long, aes(x=age, y=probability, colour=brand, shape=sex, linetype=sex))+
+  geom_line()+
+  geom_point(data=bb, aes(y=proportion))
+```
+
+One more refinement: those circles represent different numbers of people, in `total`. Use that to control *size* of plotted points:
+
+```{r}
+ggplot(probs.long, aes(x=age, y=probability, colour=brand, shape=sex, linetype=sex))+
+  geom_line()+
+  geom_point(data=bb, aes(y=proportion, size=total))
+```
+
+The curves follow the points (especially the big points) pretty well.
+
+### Interaction
+
+So far, we assumed that effect of age is same for males and females. Is there evidence that it's different?
+
+Add *interaction term*:
+
+```{r}
+b.3=update(b.1, .~.+age:sex)
+anova(b.1, b.3)
+```
+
+or if you like
+
+```{r}
+step(b.3, trace=2)
+```
+
+the interaction goes but age and sex stay.
+
+So there's no evidence that the effect of age is different for males and females.
