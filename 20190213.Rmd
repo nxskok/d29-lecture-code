@@ -363,7 +363,7 @@ or
 autonoise %>% group_by(size) %>%  nest() %>% 
   mutate(aovs=map(data, ~aov(noise~type, data=.))) %>% 
   mutate(glancing=map(aovs, ~as_tibble(glance(.)))) %>% 
-  unnest(glancing)
+  unnest(glancing) %>% select(size, p.value`)
 ```
 
 ## Story for 2-factor ANOVA:
