@@ -158,6 +158,11 @@ vitaminb.1=aov(kidneyweight~ratsize*diet, data=vitaminb)
 summary(vitaminb.1)
 ```
 
+```{r}
+drop1(vitaminb.1, test="F")
+```
+
+
 Interaction is *not* significant. Effect of diet is same for both sizes of rat.
 
 STOP HERE. Remove interaction before concluding anything else.
@@ -246,6 +251,11 @@ autonoise %>% group_by(type, size) %>%
   ggplot(aes(x=size, y=mean_noise, colour=type, group=type))+
     geom_line()+
     geom_point(data=autonoise, aes(y=noise))
+```
+```{r}
+ggplot(autonoise, aes(x=size, y=noise, colour=type, group=type))+
+  geom_point()+
+  stat_summary(fun.y=mean, geom="line")
 ```
 
 
