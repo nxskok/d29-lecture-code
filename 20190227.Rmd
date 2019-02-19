@@ -1,0 +1,57 @@
+---
+title: "February 27"
+output: html_notebook
+---
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(broom)
+library(car)
+```
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/ancova.txt"
+prepost=read_delim(my_url," ")
+prepost
+```
+
+```{r}
+ggplot(prepost,aes(x=before,y=after,colour=drug))+
+  geom_point()
+```
+
+```{r}
+prepost %>% group_by(drug) %>%
+summarize(before_mean=mean(before),
+          after_mean=mean(after))
+```
+
+```{r}
+prepost.1=lm(after~before*drug,data=prepost)
+anova(prepost.1)
+```
+
+```{r}
+new=crossing(
+before=c(5,15,25),
+drug=c("a","b"))
+new
+```
+
+```{r}
+pred=predict(prepost.1,new)
+preds=bind_cols(new,pred=pred)
+preds
+```
+
+```{r}
+ggplot(prepost,
+aes(x=before,y=after,colour=drug))+
+geom_point()+
+geom_line(data=preds,aes(y=pred))
+```
+
+`geom_smooth` re slide 279
+
