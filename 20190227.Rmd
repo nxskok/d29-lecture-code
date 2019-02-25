@@ -11,6 +11,8 @@ library(broom)
 library(car)
 ```
 
+## Analysis of covariance
+
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/ancova.txt"
 prepost=read_delim(my_url," ")
@@ -53,5 +55,130 @@ geom_point()+
 geom_line(data=preds,aes(y=pred))
 ```
 
-`geom_smooth` re slide 279
+lines are approx parallel (given amount of variability), supporting lack of interaction.
 
+Or, more simply:
+
+```{r}
+ggplot(prepost,
+aes(x=before,y=after,colour=drug))+
+  geom_point()+
+  geom_smooth(method="lm")
+```
+
+In a moment, though, need more complicated way.
+
+Take out interaction:
+
+```{r}
+prepost.2=update(prepost.1,.~.-before:drug)
+anova(prepost.2)
+```
+
+Strong main effects of `before` and `drug`.
+
+Do predictions from this model:
+
+```{r}
+pred=predict(prepost.2,new)
+preds=bind_cols(new,pred=pred)
+preds
+```
+
+Each increase of 10 in before score results in 8.3 in predicted after score,
+*the same for both drugs*. (Implication of no interaction.)
+
+Plot again, code as before:
+
+```{r}
+g=ggplot(prepost,
+  aes(x=before,y=after,colour=drug))+
+  geom_point()+
+  geom_line(data=preds,aes(y=pred))
+```
+
+This time, lines are *exactly* parallel (model says they must be).
+
+Different look at model output, as "regression":
+
+```{r}
+summary(prepost.2)
+```
+
+slide 296
+
+## Multivariate analysis of variance (MANOVA)
+
+slide 289
+
+seed yields and weights:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/manova1.txt"
+hilo=read_delim(my_url," ")
+hilo
+```
+
+boxplots: yield by fertilizer:
+
+```{r}
+ggplot(hilo,aes(x=fertilizer,y=yield))+geom_boxplot()
+```
+
+and weight by fertilizer
+
+```{r}
+ggplot(hilo,aes(x=fertilizer,y=weight))+geom_boxplot()
+```
+
+Not convincing evidence of difference on either plot.
+
+One-way ANOVAs:
+
+```{r}
+hilo.y=aov(yield~fertilizer,data=hilo)
+summary(hilo.y)
+```
+
+and
+
+```{r}
+hilo.w=aov(weight~fertilizer,data=hilo)
+summary(hilo.w)
+```
+
+Neither significant. 
+
+But, a better plot, of the two responses against each other labelled by fertilizer:
+
+```{r}
+g=ggplot(hilo,aes(x=yield,y=weight,
+colour=fertilizer))+geom_point()
+g
+```
+
+I add a line to this, for reasons that will become clear:
+
+```{r}
+d=tribble(
+~line_x, ~line_y,
+31, 14,
+38, 10)
+g+geom_line(data=d,aes(x=line_x,y=line_y,colour=NULL))
+```
+
+slide 298
+
+Is there an effect of fertilizer on yield and weight combined? This is what MANOVA finds out.
+
+```{r}
+response=with(hilo,cbind(yield,weight))
+hilo.1=manova(response~fertilizer,data=hilo)
+summary(hilo.1)
+```
+
+Neither yield or weight individually are effected by fertilizer, but *in combination* they are.
+
+
+
+## Repeated measures
