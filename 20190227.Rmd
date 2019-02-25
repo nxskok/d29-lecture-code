@@ -179,6 +179,332 @@ summary(hilo.1)
 
 Neither yield or weight individually are effected by fertilizer, but *in combination* they are.
 
+slide 300
+
+Another way to do the same thing:
+
+```{r}
+hilo.2.lm=lm(response~fertilizer,data=hilo)
+hilo.2=Manova(hilo.2.lm)
+hilo.2
+```
+
+with the same result. (We have to do repeated measures this way, but you can do MANOVA either way.)
+
+Peanuts example slide 303
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/peanuts.txt"
+(peanuts.orig=read_delim(my_url," "))
+```
+
+Location and variety are really categorical; `y`, `smk`, `w` are quantitative responses.
+
+```{r}
+peanuts.orig %>%
+  mutate(location=factor(location),
+  variety=factor(variety)) -> peanuts
+peanuts
+```
+
+create response
+
+```{r}
+response=with(peanuts,cbind(y,smk,w)) 
+class(response)
+response
+```
+
+Analysis uses `Manova`:
+
+```{r}
+peanuts.1=lm(response~location*variety,data=peanuts)
+peanuts.2=Manova(peanuts.1)
+peanuts.2
+```
+
+or not, as you prefer:
+
+```{r}
+peanuts.3=manova(response~location*variety, data=peanuts)
+summary(peanuts.3)
+```
+
+Interaction term is almost significant, so there might be a dependence of the 3-variable response on location-variety combination.
+
+Understanding that requires a 3D plot or discriminant analysis (later). 
+
+More detail:
+
+```{r}
+summary(peanuts.2)
+```
 
 
 ## Repeated measures
+
+slide 307
+
+Histamine in dogs:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/dogs.txt"
+dogs=read_table(my_url)
+dogs
+```
+
+Four response columns (histamine levels at different times).
+
+Going the `Manova` way for analysis:
+
+```{r}
+response=with(dogs,cbind(lh0,lh1,lh3,lh5))
+dogs.lm=lm(response~drug,data=dogs)
+```
+
+We have some extra setup to express that these are the same thing measured at different times:
+
+```{r}
+times=colnames(response)
+times.df=data.frame(times)
+```
+
+What are these?
+
+```{r}
+times
+```
+
+and
+
+```{r}
+times.df
+```
+
+note that `times` has gotten turned into a factor. `tibble` doesn't work (instead of `data.frame`) because it doesn't create factors (unless you make it do so).
+
+Then the analysis
+
+```{r}
+dogs.1=Manova(dogs.lm, idata=times.df, idesign=~times)
+dogs.1
+```
+
+The effect of drug is different at different times.
+
+To investigate what, we can draw a graph. But we have wide format:
+
+```{r}
+dogs
+```
+
+and we want all the histamine levels in *one* column:
+
+```{r}
+dogs %>% gather(timex,lh,lh0:lh5)
+```
+
+Can we get the times as *numbers*?
+
+```{r}
+dogs %>% gather(timex,lh,lh0:lh5) %>% 
+  mutate(time=parse_number(timex)) -> dogs.long
+dogs.long
+```
+
+Make an interaction plot of log-histamine against time, labelled by drug:
+
+```{r}
+ggplot(dogs.long,aes(x=time, y=lh ,colour=drug, group=drug))+
+  stat_summary(fun.y=mean,geom="point")+
+  stat_summary(fun.y=mean,geom="line")
+```
+
+This shows that log-histamine levels are similar at time zero, but for all times after that, trimethaphan log-histamine levels are higher.
+
+I could add the data:
+
+```{r}
+ggplot(dogs.long,aes(x=time, y=lh, colour=drug, group=drug))+
+  stat_summary(fun.y=mean,geom="line")+
+  geom_point()
+```
+
+The log-histamine levels really are all mixed up at time zero, and the blue points really are higher than the red ones after that. This explains the significant interaction. 
+
+Time zero really ought not to be included in the analysis, because there is no time for the drugs to have an effect. (There is usually a value noted at time zero so that we can confirm the drugs were not different then.) 
+
+So let's go back to the original data frame and exclude time zero. This means redefining the response and following through:
+
+```{r}
+response=with(dogs,cbind(lh1, lh3, lh5)) # excluding time zero
+dogs.lm=lm(response~drug, data=dogs)
+times=colnames(response)
+times.df=data.frame(times)
+dogs.2=Manova(dogs.lm,idata=times.df, idesign=~times)
+```
+
+to check:
+
+```{r}
+times.df
+```
+
+and then:
+
+```{r}
+dogs.2
+```
+
+The interaction is no longer significant.
+
+Cannot take it out (interaction of "within-subject" factor `times` and "between-subject" factor `drug`). So ignore it, because it is non-significant, and interpret the main effects: an effect of time, but an only marginally significant effect of drug. 
+
+A better plot for repeated-measures data is to join measurements on the same individual: a "spaghetti plot", thus:
+
+```{r}
+ggplot(dogs.long,aes(x=time, y=lh, colour=drug, group=dog)) +
+  geom_point()+geom_line()
+```
+
+Mixed model approach:
+
+```{r}
+library(lme4)
+```
+
+Make sure to use the *text* time instead of the numerical time, to get it treated as categorical (otherwise gets treated as regression, linear in time, which it is not).
+
+```{r}
+dogs.3=lmer(lh~timex*drug+(1|dog), data=dogs.long)
+drop1(dogs.3, test="Chisq")
+```
+
+This time the interaction is strongly significant.
+
+or omit time zero:
+
+```{r}
+dogs.long %>% filter(time>0) -> d
+dogs.4=lmer(lh~timex*drug+(1|dog), data=d) 
+drop1(dogs.4, test="Chisq")
+```
+
+this time the interaction is still significant. 
+
+Another example: exercise, see slide 325.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/exercise.txt"
+exercise.long=read_tsv(my_url)
+exercise.long
+```
+
+Diet and exercise type are between-subjects, but time is within-subjects. (Each subject does one diet and one type of exercise all the way through, but is measured at several different times.) 
+
+Make *wide* for analysis:
+
+```{r}
+exercise.long %>% spread(time, pulse) -> exercise.wide
+exercise.wide
+```
+
+Make response:
+
+```{r}
+response=with(exercise.wide, cbind(min01, min15, min30))
+```
+
+Predict from diet and exercise type:
+
+```{r}
+exercise.1=lm(response~diet*exertype, data=exercise.wide)
+```
+
+Manova:
+
+```{r}
+times=colnames(response)
+times.df=data.frame(times)
+exercise.2=Manova(exercise.1, idata=times.df, idesign=~times)
+exercise.2
+```
+
+Now have significant *three*-way interaction: the effect of the combination of diet and exercise type is itself different at different times.
+
+Spaghetti plot:
+
+```{r}
+ggplot(exercise.long, aes(x=time, y=pulse, group=id))+
+  geom_point()+geom_line()
+```
+
+but normally we'd have a colour = something, and here we have two somethings: diet and exercise type. So instead have facets for these. With two things to facet by, use `facet_grid` to have one as rows and the other as columns:
+
+```{r}
+ggplot(exercise.long, aes(x=time, y=pulse, group=id))+
+  geom_point()+geom_line()+
+  facet_grid(diet~exertype)
+```
+
+Only for exercise type running is there any time effect worth noting. 
+
+Can I do "simple effects" of diet for the runners? 
+
+Pull out only the runners first:
+
+```{r}
+exercise.wide %>%
+  filter(exertype=="running") -> runners.wide
+```
+
+and then redo all the same analysis on this data frame:
+
+```{r}
+response=with(runners.wide, cbind(min01, min15, min30))
+runners.1=lm(response~diet, data=runners.wide)
+times=colnames(response)
+times.df=data.frame(times)
+runners.2=Manova(runners.1, idata=times.df, idesign=~times)
+runners.2
+```
+
+Even for the runners, the effect of time is still different for each diet.
+
+Now that we are just focusing on one exercise type, we can do an interaction plot, for which we need long data:
+
+```{r}
+runners.wide
+runners.wide %>% gather(time, pulse, min01:min30) -> runners.long
+runners.long
+```
+
+(the other way of doing this is to start with `exercise.long` and filter the runners.)
+
+and then the interaction plot:
+
+```{r}
+ggplot(runners.long, aes(x=time, y=pulse, colour=diet, group=diet))+
+  stat_summary(fun.y=mean, geom="point") +
+  stat_summary(fun.y=mean, geom="line")
+```
+
+These are not parallel: the difference in (mean) pulse rates gets larger as time passes. Is this real? Look at spaghetti plot:
+
+```{r}
+ggplot(runners.long, aes(x=time, y=pulse, colour=diet, group=id))+
+  geom_point()+geom_line()
+```
+
+At 1 minute, the pulse rates are all mixed up, at 15 minutes the lowfat ones are mostly higher, and at 30 minutes they are all clearly higher. (What would happen if we took out "time zero", namely 1 minute?)
+
+```{r}
+response=with(runners.wide, cbind(min15, min30))
+runners.3=lm(response~diet, data=runners.wide)
+times=colnames(response)
+times.df=data.frame(times)
+runners.4=Manova(runners.3, idata=times.df, idesign=~times)
+runners.4
+```
+
+The interaction is no longer significant. There is a marginally significant time effect (comparing 15 minutes and 30 minutes), and a definite diet effect.
