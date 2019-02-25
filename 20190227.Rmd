@@ -501,7 +501,7 @@ At 1 minute, the pulse rates are all mixed up, at 15 minutes the lowfat ones are
 ```{r}
 response=with(runners.wide, cbind(min15, min30))
 runners.3=lm(response~diet, data=runners.wide)
-times=colnames(response)
+times=colnames(response) 
 times.df=data.frame(times)
 runners.4=Manova(runners.3, idata=times.df, idesign=~times)
 runners.4
