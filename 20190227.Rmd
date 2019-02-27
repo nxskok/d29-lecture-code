@@ -14,6 +14,8 @@ library(lme4) # for mixed models repeated measures, later
 
 ## Analysis of covariance
 
+slide 270 for background, 271 for data
+
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/ancova.txt"
 prepost=read_delim(my_url," ")
@@ -25,16 +27,22 @@ ggplot(prepost,aes(x=before,y=after,colour=drug))+
   geom_point()
 ```
 
+compare before and after means of each drug
+
 ```{r}
 prepost %>% group_by(drug) %>%
 summarize(before_mean=mean(before),
           after_mean=mean(after))
 ```
 
+analysis with interaction
+
 ```{r}
 prepost.1=lm(after~before*drug,data=prepost)
 anova(prepost.1)
 ```
+
+interaction not significant, remove (later), but first, predictions:
 
 ```{r}
 new=crossing(
@@ -43,17 +51,20 @@ drug=c("a","b"))
 new
 ```
 
+and then predict:
+
 ```{r}
 pred=predict(prepost.1,new)
 preds=bind_cols(new,pred=pred)
 preds
 ```
 
+plot data with predictions
+
 ```{r}
-ggplot(prepost,
-aes(x=before,y=after,colour=drug))+
-geom_point()+
-geom_line(data=preds,aes(y=pred))
+ggplot(prepost, aes(x=before,y=after,colour=drug))+
+  geom_point()+
+  geom_line(data=preds,aes(y=pred))
 ```
 
 lines are approx parallel (given amount of variability), supporting lack of interaction.
@@ -64,7 +75,7 @@ Or, more simply:
 ggplot(prepost,
 aes(x=before,y=after,colour=drug))+
   geom_point()+
-  geom_smooth(method="lm")
+  geom_smooth(method="lm", se=F)
 ```
 
 In a moment, though, need more complicated way.
@@ -92,7 +103,7 @@ Each increase of 10 in before score results in 8.3 in predicted after score,
 Plot again, code as before:
 
 ```{r}
-g=ggplot(prepost,
+ggplot(prepost,
   aes(x=before,y=after,colour=drug))+
   geom_point()+
   geom_line(data=preds,aes(y=pred))
@@ -106,7 +117,7 @@ Different look at model output, as "regression":
 summary(prepost.2)
 ```
 
-slide 296
+slide 286 for discussion
 
 ## Multivariate analysis of variance (MANOVA)
 
@@ -154,7 +165,7 @@ But, a better plot, of the two responses against each other labelled by fertiliz
 
 ```{r}
 g=ggplot(hilo,aes(x=yield,y=weight,
-colour=fertilizer))+geom_point()
+  colour=fertilizer))+geom_point()
 g
 ```
 
@@ -162,9 +173,10 @@ I add a line to this, for reasons that will become clear:
 
 ```{r}
 d=tribble(
-~line_x, ~line_y,
-31, 14,
-38, 10)
+  ~line_x, ~line_y,
+  31, 14,
+  38, 10)
+d
 g+geom_line(data=d,aes(x=line_x,y=line_y,colour=NULL))
 ```
 
@@ -174,22 +186,22 @@ Is there an effect of fertilizer on yield and weight combined? This is what MANO
 
 ```{r}
 response=with(hilo,cbind(yield,weight))
-hilo.1=manova(response~fertilizer,data=hilo)
+hilo.1=manova(response~fertilizer, data=hilo)
 summary(hilo.1)
 ```
 
-Neither yield or weight individually are effected by fertilizer, but *in combination* they are.
+Neither yield or weight individually are affected by fertilizer, but *in combination* they are.
 
 slide 300
 
-Another way to do the same thing:
+Another way to do the same thing, from package `car`:
 
 ```{r}
 hilo.2=lm(response~fertilizer,data=hilo)
 Manova(hilo.2)
 ```
 
-with the same result. (We have to do repeated measures this way, but you can do MANOVA either way.)
+with the same result. (We have to do repeated measures, later, this way, but you can do MANOVA either way.)
 
 Peanuts example slide 303
 
@@ -236,7 +248,7 @@ Understanding that requires a 3D plot or discriminant analysis (later).
 More detail:
 
 ```{r}
-summary(peanuts.2)
+summary(Manova(peanuts.1))
 ```
 
 
@@ -338,20 +350,10 @@ So let's go back to the original data frame and exclude time zero. This means re
 response=with(dogs,cbind(lh1, lh3, lh5)) # excluding time zero
 dogs.2=lm(response~drug, data=dogs)
 times=colnames(response)
+times
 times.df=data.frame(times)
-Manova(dogs.2,idata=times.df, idesign=~times)
-```
-
-to check:
-
-```{r}
 times.df
-```
-
-and then:
-
-```{r}
-dogs.2
+Manova(dogs.2,idata=times.df, idesign=~times)
 ```
 
 The interaction is no longer significant.
