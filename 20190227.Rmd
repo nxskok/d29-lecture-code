@@ -117,6 +117,11 @@ Different look at model output, as "regression":
 summary(prepost.2)
 ```
 
+
+```{r}
+summary(prepost.1)
+```
+
 slide 286 for discussion
 
 ## Multivariate analysis of variance (MANOVA)
@@ -186,9 +191,12 @@ Is there an effect of fertilizer on yield and weight combined? This is what MANO
 
 ```{r}
 response=with(hilo,cbind(yield,weight))
+
 hilo.1=manova(response~fertilizer, data=hilo)
 summary(hilo.1)
 ```
+
+
 
 Neither yield or weight individually are affected by fertilizer, but *in combination* they are.
 
@@ -203,6 +211,13 @@ Manova(hilo.2)
 
 with the same result. (We have to do repeated measures, later, this way, but you can do MANOVA either way.)
 
+
+
+```{r}
+summary(Manova(hilo.2))
+```
+  
+
 Peanuts example slide 303
 
 ```{r}
@@ -215,7 +230,7 @@ Location and variety are really categorical; `y`, `smk`, `w` are quantitative re
 ```{r}
 peanuts.orig %>%
   mutate(location=factor(location),
-  variety=factor(variety)) -> peanuts
+         variety=factor(variety)) -> peanuts
 peanuts
 ```
 
@@ -276,6 +291,7 @@ dogs.1=lm(response~drug,data=dogs)
 We have some extra setup to express that these are the same thing measured at different times:
 
 ```{r}
+response
 times=colnames(response)
 times.df=data.frame(times)
 ```
