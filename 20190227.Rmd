@@ -9,6 +9,7 @@ output: html_notebook
 library(tidyverse)
 library(broom)
 library(car)
+library(lme4) # for mixed models repeated measures, later
 ```
 
 ## Analysis of covariance
@@ -184,9 +185,8 @@ slide 300
 Another way to do the same thing:
 
 ```{r}
-hilo.2.lm=lm(response~fertilizer,data=hilo)
-hilo.2=Manova(hilo.2.lm)
-hilo.2
+hilo.2=lm(response~fertilizer,data=hilo)
+Manova(hilo.2)
 ```
 
 with the same result. (We have to do repeated measures this way, but you can do MANOVA either way.)
@@ -219,8 +219,7 @@ Analysis uses `Manova`:
 
 ```{r}
 peanuts.1=lm(response~location*variety,data=peanuts)
-peanuts.2=Manova(peanuts.1)
-peanuts.2
+Manova(peanuts.1)
 ```
 
 or not, as you prefer:
@@ -259,7 +258,7 @@ Going the `Manova` way for analysis:
 
 ```{r}
 response=with(dogs,cbind(lh0,lh1,lh3,lh5))
-dogs.lm=lm(response~drug,data=dogs)
+dogs.1=lm(response~drug,data=dogs)
 ```
 
 We have some extra setup to express that these are the same thing measured at different times:
@@ -286,8 +285,7 @@ note that `times` has gotten turned into a factor. `tibble` doesn't work (instea
 Then the analysis
 
 ```{r}
-dogs.1=Manova(dogs.lm, idata=times.df, idesign=~times)
-dogs.1
+Manova(dogs.1, idata=times.df, idesign=~times)
 ```
 
 The effect of drug is different at different times.
@@ -338,10 +336,10 @@ So let's go back to the original data frame and exclude time zero. This means re
 
 ```{r}
 response=with(dogs,cbind(lh1, lh3, lh5)) # excluding time zero
-dogs.lm=lm(response~drug, data=dogs)
+dogs.2=lm(response~drug, data=dogs)
 times=colnames(response)
 times.df=data.frame(times)
-dogs.2=Manova(dogs.lm,idata=times.df, idesign=~times)
+Manova(dogs.2,idata=times.df, idesign=~times)
 ```
 
 to check:
@@ -367,11 +365,7 @@ ggplot(dogs.long,aes(x=time, y=lh, colour=drug, group=dog)) +
   geom_point()+geom_line()
 ```
 
-Mixed model approach:
-
-```{r}
-library(lme4)
-```
+Mixed model approach, using `lme4`:
 
 Make sure to use the *text* time instead of the numerical time, to get it treated as categorical (otherwise gets treated as regression, linear in time, which it is not).
 
@@ -426,8 +420,7 @@ Manova:
 ```{r}
 times=colnames(response)
 times.df=data.frame(times)
-exercise.2=Manova(exercise.1, idata=times.df, idesign=~times)
-exercise.2
+Manova(exercise.1, idata=times.df, idesign=~times)
 ```
 
 Now have significant *three*-way interaction: the effect of the combination of diet and exercise type is itself different at different times.
@@ -465,8 +458,7 @@ response=with(runners.wide, cbind(min01, min15, min30))
 runners.1=lm(response~diet, data=runners.wide)
 times=colnames(response)
 times.df=data.frame(times)
-runners.2=Manova(runners.1, idata=times.df, idesign=~times)
-runners.2
+Manova(runners.1, idata=times.df, idesign=~times)
 ```
 
 Even for the runners, the effect of time is still different for each diet.
@@ -503,8 +495,7 @@ response=with(runners.wide, cbind(min15, min30))
 runners.3=lm(response~diet, data=runners.wide)
 times=colnames(response) 
 times.df=data.frame(times)
-runners.4=Manova(runners.3, idata=times.df, idesign=~times)
-runners.4
+Manova(runners.3, idata=times.df, idesign=~times)
 ```
 
 The interaction is no longer significant. There is a marginally significant time effect (comparing 15 minutes and 30 minutes), and a definite diet effect.
