@@ -3,11 +3,34 @@ title: "March 6"
 output: html_notebook
 ---
 
+## Packages
+
+Install `ggbiplot` below by installing `devtools` first, then:
+
+```{r, eval=F}
+library(devtools)
+install_github("vqv/ggbiplot")
+```
+
+
+```{r}
+library(ggbiplot) # biplots for discriminant analysis (and other things)
+library(MASS) # for discriminant analysis (later)
+library(tidyverse)
+library(car)
+library(lme4) # for mixed models
+library(ggrepel) # for labelling points on plots
+```
+
 ## Repeated measures (review)
 
 slide 307
 
-Histamine in dogs:
+
+
+### Histamine in dogs
+
+(repeated, faster)
 
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/dogs.txt"
@@ -69,9 +92,7 @@ So let's go back to the original data frame and exclude time zero. This means re
 response=with(dogs,cbind(lh1, lh3, lh5)) # excluding time zero
 dogs.2=lm(response~drug, data=dogs)
 times=colnames(response)
-times
 times.df=data.frame(times)
-times.df
 Manova(dogs.2,idata=times.df, idesign=~times)
 ```
 
@@ -80,7 +101,7 @@ The interaction is no longer significant. Go back and look at interaction plot a
 Cannot take it out (interaction of "within-subject" factor `times` and "between-subject" factor `drug`). So ignore it, because it is non-significant, and interpret the main effects: an effect of time, but an only marginally significant effect of drug. 
 
 
-Mixed model approach, using `lme4`:
+### Mixed model approach, using `lme4`:
 
 Make sure to use the *text* time instead of the numerical time, to get it treated as categorical (otherwise gets treated as regression, linear in time, which it is not).
 
@@ -99,9 +120,11 @@ dogs.4=lmer(lh~timex*drug+(1|dog), data=d)
 drop1(dogs.4, test="Chisq")
 ```
 
-this time the interaction is still significant. 
+this time the interaction is still significant. (Maybe that drop from time 1 to time 3 is steeper for drug morphine.)
 
-Another example: exercise, see slide 325.
+## Another example: exercise and diet
+
+See slide 325.
 
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/exercise.txt"
@@ -155,6 +178,8 @@ ggplot(exercise.long, aes(x=time, y=pulse, group=id))+
   facet_grid(diet~exertype)
 ```
 
+(put the categorical variable with more levels on the $x$.)
+
 Only for exercise type running is there any time effect worth noting. 
 
 Can I do "simple effects" of diet for the runners? 
@@ -186,7 +211,12 @@ runners.wide %>% gather(time, pulse, min01:min30) -> runners.long
 runners.long
 ```
 
-(the other way of doing this is to start with `exercise.long` and filter the runners.)
+the other way of doing this is to start with `exercise.long` and filter the runners:
+
+```{r}
+exercise.long %>% filter(exertype=="running")
+```
+
 
 and then the interaction plot:
 
@@ -203,17 +233,358 @@ ggplot(runners.long, aes(x=time, y=pulse, colour=diet, group=id))+
   geom_point()+geom_line()
 ```
 
-At 1 minute, the pulse rates are all mixed up, at 15 minutes the lowfat ones are mostly higher, and at 30 minutes they are all clearly higher. (What would happen if we took out "time zero", namely 1 minute?)
+At 1 minute, the pulse rates are all mixed up, at 15 minutes the lowfat ones are mostly higher, and at 30 minutes they are all clearly higher. 
+
+
+## Discriminant analysis
+
+slide 340
+
+notes on `select`1: slide 342
+
+### Seed yields and weights
+
+(again)
 
 ```{r}
-response=with(runners.wide, cbind(min15, min30))
-runners.3=lm(response~diet, data=runners.wide)
-times=colnames(response) 
-times.df=data.frame(times)
-Manova(runners.3, idata=times.df, idesign=~times)
+my_url="http://www.utsc.utoronto.ca/~butler/d29/manova1.txt"
+hilo=read_delim(my_url," ")
+ggplot(hilo,aes(x=yield,y=weight,
+  colour=fertilizer))+geom_point()
 ```
 
-The interaction is no longer significant. There is a marginally significant time effect (comparing 15 minutes and 30 minutes), and a definite diet effect.
+fertilizer had an effect on *combination* of yield and weight: if fertilizer was high, yield and weight were *both* high. This was significant: MANOVA:
 
+```{r}
+response=with(hilo,cbind(yield,weight))
+hilo.2=lm(response~fertilizer,data=hilo)
+Manova(hilo.2)
+```
+
+Discriminant analysis done with `lda` from `MASS`. Group is the "response", so flip around response and explanatory:
+
+```{r}
+hilo.1=lda(fertilizer~yield+weight,data=hilo)
+hilo.1
+```
+
+`LD1` is a "score", made up by combining yield and weight, that best distinguishes high and low fertilizer. 
+
+Here, both coefficients are negative, so:
+
+- when yield and weight are both high, LD1 will be very *negative*.
+- when yield and weight are both low, LD1 will be very *positive*.
+
+LD1 maps the two variables into one dimension in a way that best distinguishes the groups.
+
+How many LDs do you get? See slide 347. Here $\min(2, 2-1)=1$.
+
+Each observation has a score on each LD, gotten by `predict`ing:
+
+```{r}
+p=predict(hilo.1)
+p
+```
+
+(look at `class` and `posterior` shortly).
+
+```{r}
+cbind(hilo, p) %>% arrange(LD1) -> d
+d
+```
+
+All the smallest (most negative) `LD1`s go with high fertilizer, and high yield and weight. All the most positive ones go with low fertilizer, and small yield and weight.
+
+The LDs "reduce the dimension": here, LD1 says how the fertilizer groups differ in *one* dimension while yield and weight take two. So, can plot the first or first two LDs against the groups to see how the groups differ:
+
+```{r}
+ggplot(d, aes(x=fertilizer, y=LD1))+geom_boxplot()
+```
+
+High fertilizer goes with negative LD1, which goes with high yield and weight. Low fertilizer is the opposite.
+
+More in `d`:
+
+```{r}
+d
+```
+
+
+`class` is the best guess at which fertilizer level each plant was at, based on its yield and weight. Tabulating with `fertilizer` shows how distinguishable the groups are:
+
+```{r}
+d %>% count(fertilizer, class)
+```
+
+All correct. The two fertilizer groups are very distinguishable based on yield and weight. 
+
+The two `posterior` columns are how sure we are each plant was high or low fertilizer. Use `round` to avoid scientific notation:
+
+```{r}
+d %>% mutate_at(vars(starts_with("posterior")), ~round(.,3))
+```
+
+Most of these we are almost certain about. The 4th plant has some doubt: the yield is low, but the weight is high.
+
+### Peanuts revisited
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/peanuts.txt"
+peanuts=read_delim(my_url," ")
+peanuts
+```
+
+Three responses (cannot plot), two grouping variables.
+
+Discriminant analysis can only handle one grouping variable, so create combination column first:
+
+```{r}
+(peanuts %>% unite(combo, variety, location) -> peanuts_combo)
+```
+
+How does `combo` "depend" on the other things?
+
+```{r}
+peanuts.1=lda(combo~y+smk+w, data=peanuts_combo)
+peanuts.1
+```
+
+This time, have 3 LDs: three response variables, 6 combo groups, $\min(3, 6-1)=3$.
+
+"Proportion of trace" says how relatively important each of the LDs is at distinguishing the groups. LD1 is very important, LD2 somewhat, LD3 not at all. Ignore LD3 from here.
+
+To see what variables the LDs depend on, decide whether each coefficient is "clearly positive", "clearly negative", "close to zero". (Judgement call.)
+
+For me:
+- LD1 depends positively on `w`, negatively on `y`, not so much on `smk`.
+- LD2 depends positively on `w`, not much on others.
+
+That is, `smk` does very little to distinguish the groups.
+
+Predictions:
+
+```{r}
+p=predict(peanuts.1)
+cbind(peanuts_combo, p) %>% mutate_at(vars(starts_with("posterior")), ~round(., 2)) -> d
+View(d)
+```
+
+Plot `LD1` and `LD2` with `combo` as a labelled scatterplot:
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
+  geom_point()+geom_text_repel()
+```
+
+or, now that we know that `smk` has nothing to do with distinguishing combos, plot `y` and `w` instead:
+
+```{r}
+ggplot(d, aes(x=w, y=y, colour=combo, label=combo))+
+  geom_point()+geom_text_repel()
+```
+
+Both these plots suggest that the combos are mostly well distinguished. How are the predictions?
+
+predicted class and actual combo:
+
+```{r}
+with(d, table(combo, class))
+```
+
+One of the actual variety 6, location 2 was predicted to be a variety 5, location 1, but others all correct.
+
+How clear-cut are these?
+
+```{r}
+d %>% select(combo, class, starts_with("posterior"))
+```
+
+Mostly clear (posterior prob near 1 for right combo, 0 otherwise). The wrong one was a very close call. The 5_1 and 6_2 seem the most confusible.
+
+Bi-plot shows LDs and original variables:
+
+```{r}
+ggbiplot(peanuts.1, groups=factor(d$combo))
+```
+
+Cross-validation: slide 369
+
+Fitting and prediction together:
+
+```{r}
+peanuts.2=lda(combo~y+smk+w, data=peanuts_combo, CV=T)
+cbind(peanuts_combo, class=peanuts.2$class, peanuts.2$posterior) -> cv
+cv
+with(cv, table(obs=combo, pred=class))
+```
+
+Predictions not so good this time. Posterior probabilities?
+
+```{r}
+cv %>% mutate_at(vars(contains("_")), ~round(.,3)) %>% select(-c(y, smk, w))
+```
+
+The wrong ones are more badly wrong this time. Why? Look again at LD plot:
+
+```{r}
+ggplot(d, aes(x=w, y=y, colour=combo, label=combo))+
+  geom_point()+geom_text_repel()
+```
+
+Each prediction based on *omitting* the one being predicted. So if two plants for each combo a long way apart on plot a long way apart, each of them will probably be mistaken for something else. Eg. the `5_2` near the `8_1`s will almost certainly be classified as one of those. 
+
+### Professions and leisure activities
+
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/profile.txt"
+active=read_delim(my_url," ")
+active
+active.1=lda(job~reading+dance+tv+ski,data=active)
+```
+
+```{r}
+active.1
+```
+
+Most of the distinguishing is done by `LD1`. This depends (negatively) on attitudes towards dancing and TV-watching, `LD2` depends negatively on TV-watching.
+
+```{r}
+p=predict(active.1)
+cbind(active, p) -> d
+```
+
+Plot individuals' scores by their actual job:
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job))+geom_point()+geom_text_repel()
+```
+
+Or, having decided that things really only depend on attitudes towards dancing and TV-watching:
+
+```{r}
+ggplot(d, aes(x=dance, y=tv, colour=job, label=job))+geom_point()+geom_text_repel()
+```
+
+or, a biplot that shows both:
+
+```{r}
+ggbiplot(active.1, groups=factor(active$job))
+```
+
+The bellydancers like dancing, and the politicians don't really like dancing, but like watching TV.
+
+Classification:
+
+```{r}
+d %>% count(job, class)
+```
+
+Everyone gotten right. Was this clear-cut?
+
+```{r}
+d %>% mutate_at(vars(starts_with("posterior")), ~round(., 3))
+```
+
+yep. Only the last one has any doubt at all.
+
+
+Cross-validating the jobs data (all in one shot):
+
+```{r}
+active.2=lda(job~reading+dance+tv+ski, data=active, CV=T)
+cbind(active, class=active.2$class, active.2$posterior) -> cv
+cv
+```
+
+Correctness of predictions:
+
+```{r}
+with(cv, table(job, class))
+```
+
+One error this time. Why?
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job))+geom_point()+geom_text_repel()
+```
+
+One of the bellydancers is a lot closer to the politicians. This shows up in the posterior probabilities:
+
+```{r}
+cv %>% mutate_at(vars(admin:politician), ~round(.,3))
+```
+
+The last bellydancer was "almost certainly" a politician! One of the administrators could also have been a politician.
+
+
+### Remote sensing of crops
+
+Measure four variables `x1` through `x4` from aerial photographs. Use them to determine which of five crops are being grown in the fields being photographed.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/remote-sensing.txt"
+crops=read_table(my_url)
+crops
+```
+
+Which variables are important?
+
+```{r}
+crops.1=lda(crop~x1+x2+x3+x4, data=crops)
+crops.1
+```
+
+Should look at LD1 and (maybe) LD2, but not the others.
+
+LD1 depends mainly on `x1`, LD2 mainly on `x3`.
+
+What we really care about is how distinguishable the crops are. So plot scores on LD1 and LD2, distinguished by crop:
+
+```{r}
+p=predict(crops.1)
+cbind(crops, p) %>% mutate_at(vars(starts_with("posterior")), ~round(., 3)) -> d
+d
+```
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=crop))+geom_point()
+```
+
+Pretty awful! Maybe corn is distinguishable from the rest, and maybe (somewhat) soybeans, but clover is all over the place!
+
+Biplot shows connection with original x's:
+
+```{r}
+ggbiplot(crops.1, groups=crops$crop)
+```
+
+`x1` distinguishes some of the crops:
+
+```{r}
+ggplot(crops, aes(x=crop, y=x1)) + geom_boxplot()
+```
+
+and maybe `x3` some of the others:
+
+```{r}
+ggplot(crops, aes(x=crop, y=x3)) + geom_boxplot()
+```
+
+but not very convincingly.
+
+Expect the predictions to be pretty awful:
+
+```{r}
+with(d, table(crop, class))
+```
+
+Almost all of the corn are gotten right, and half of the soybeans (and surprisingly half of the clover). Expect the posterior probabilities to be pretty unclear:
+
+```{r}
+d %>% select(crop, class, starts_with("posterior"))
+```
+
+Even the actual corn has a mostly less than 50% posterior probability of being corn, based on `x1` through `x4`. Some of the clover is likely clover, but some of it is more likely something else!
 
 
