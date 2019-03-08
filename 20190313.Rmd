@@ -1,0 +1,202 @@
+---
+title: "March 13"
+output: html_notebook
+---
+
+## Packages
+
+```{r}
+library(ggbiplot)
+library(MASS)
+library(tidyverse)
+library(ggrepel)
+```
+
+## Discriminant analysis continued
+
+### Leisure activities
+
+This is what we had last week:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/profile.txt"
+active=read_delim(my_url," ")
+active
+active.1=lda(job~reading+dance+tv+ski,data=active)
+```
+
+and we decided that the jobs were pretty distinguishable by how the people in those jobs rated the leisure activities:
+
+```{r}
+p=predict(active.1)
+d=cbind(active, p)
+d
+```
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job)) + geom_point() + geom_text_repel()
+```
+
+People that like dancing are on the left, people that like TV-watching are at the bottom:
+
+```{r}
+active.1
+```
+
+The predictions got everyone right:
+
+```{r}
+with(d, table(job, class))
+```
+
+
+Now, we predicted group membership from *same* data used to make LDs: *cheating*!
+
+A more honest way to go is to make LDs from all the data points *except one*, and then predict the one you left out. This is called **cross-validation**. That goes this way:
+
+```{r}
+active.2=lda(job~reading+dance+tv+ski,data=active, CV=T)
+active.2
+```
+
+This produces everything `predict` would, but by cross-validation. Making a data frame of this doesn't work:
+
+```{r, error=TRUE}
+d2=cbind(active, active.2)
+```
+
+so we have to be a little more careful:
+
+```{r}
+d2=cbind(active, class=active.2$class, posterior=active.2$posterior)
+d2
+```
+
+and let's round those posterior probabilities to 3 decimals while we're about it:
+
+```{r}
+d2 %>% mutate_at(vars(starts_with("posterior")), ~round(., 3)) -> d2
+d2
+```
+
+How well do people get classified now?
+
+```{r}
+with(d2, table(job, class))
+```
+
+One of the bellydancers got classified as a politician. Was it a close call?
+
+```{r}
+d2 %>% filter(job != class)
+```
+
+This person was "certainly" a politician (except that they were not!). Where were they on our plot?
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job)) + geom_point() + geom_text_repel()
+```
+
+If you take that unusual bellydancer away, the bellydancers are more up and left, and the one we left out looks more like a politician. 
+
+
+### Peanuts revisited
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/peanuts.txt"
+peanuts=read_delim(my_url," ")
+peanuts
+```
+
+Three responses (cannot plot), two grouping variables.
+
+Discriminant analysis can only handle one grouping variable, so create combination column first:
+
+```{r}
+(peanuts %>% unite(combo, variety, location) -> peanuts_combo)
+```
+
+How does `combo` "depend" on the other things?
+
+```{r}
+peanuts.1=lda(combo~y+smk+w, data=peanuts_combo)
+peanuts.1
+```
+
+This time, have 3 LDs: three response variables, 6 combo groups, $\min(3, 6-1)=3$.
+
+"Proportion of trace" says how relatively important each of the LDs is at distinguishing the groups. LD1 is very important, LD2 somewhat, LD3 not at all. Ignore LD3 from here.
+
+To see what variables the LDs depend on, decide whether each coefficient is "clearly positive", "clearly negative", "close to zero". (Judgement call.)
+
+For me:
+- LD1 depends positively on `w`, negatively on `y`, not so much on `smk`.
+- LD2 depends positively on `w`, not much on others.
+
+That is, `smk` does very little to distinguish the groups.
+
+Predictions:
+
+```{r}
+p=predict(peanuts.1)
+cbind(peanuts_combo, p) %>% mutate_at(vars(starts_with("posterior")), ~round(., 2)) -> d
+View(d)
+```
+
+Plot `LD1` and `LD2` with `combo` as a labelled scatterplot:
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
+  geom_point()+geom_text_repel()
+```
+
+
+This plot suggests that the combos are mostly well distinguished. How are the predictions?
+
+predicted class and actual combo:
+
+```{r}
+with(d, table(combo, class))
+```
+
+One of the actual variety 6, location 2 was predicted to be a variety 5, location 1, but others all correct.
+
+How clear-cut are these?
+
+```{r}
+d %>% select(combo, class, starts_with("posterior"))
+```
+
+Mostly clear (posterior prob near 1 for right combo, 0 otherwise). The wrong one was a very close call. The 5_1 and 6_2 seem the most confusible.
+
+Bi-plot shows LDs and original variables:
+
+```{r}
+ggbiplot(peanuts.1, groups=factor(d$combo))
+```
+
+Cross-validation: slide 369
+
+Fitting and prediction together:
+
+```{r}
+peanuts.2=lda(combo~y+smk+w, data=peanuts_combo, CV=T)
+cbind(peanuts_combo, class=peanuts.2$class, peanuts.2$posterior) -> cv
+cv
+with(cv, table(obs=combo, pred=class))
+```
+
+Predictions not so good this time. Posterior probabilities?
+
+```{r}
+cv %>% mutate_at(vars(contains("_")), ~round(.,3)) %>% select(-c(y, smk, w))
+```
+
+The wrong ones are more badly wrong this time. Why? Look again at LD plot:
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
+  geom_point()+geom_text_repel()
+```
+
+Each prediction based on *omitting* the one being predicted. So if two plants for each combo a long way apart on plot a long way apart, each of them will probably be mistaken for something else. Eg. the `5_2` near the `8_1`s will almost certainly be classified as one of those. 
