@@ -40,13 +40,13 @@ dogs
 
 ```{r}
 response=with(dogs,cbind(lh0,lh1,lh3,lh5))
+response
 dogs.1=lm(response~drug,data=dogs)
 ```
 
 We have some extra setup to express that these are the same thing measured at different times:
 
 ```{r}
-response
 times=colnames(response)
 times.df=data.frame(times)
 ```
@@ -103,7 +103,14 @@ Cannot take it out (interaction of "within-subject" factor `times` and "between-
 
 ### Mixed model approach, using `lme4`:
 
-Make sure to use the *text* time instead of the numerical time, to get it treated as categorical (otherwise gets treated as regression, linear in time, which it is not).
+This uses the "long format" `dogs.long`:
+
+```{r}
+dogs.long
+```
+
+
+Make sure to use the *text* time `timex` instead of the numerical time, to get it treated as categorical (otherwise gets treated as regression, linear in time, which it is not).
 
 ```{r}
 dogs.3=lmer(lh~timex*drug+(1|dog), data=dogs.long)
@@ -178,6 +185,7 @@ ggplot(exercise.long, aes(x=time, y=pulse, group=id))+
   facet_grid(diet~exertype)
 ```
 
+
 (put the categorical variable with more levels on the $x$.)
 
 Only for exercise type running is there any time effect worth noting. 
@@ -187,8 +195,8 @@ Can I do "simple effects" of diet for the runners?
 Pull out only the runners first:
 
 ```{r}
-exercise.wide %>%
-  filter(exertype=="running") -> runners.wide
+(exercise.wide %>%
+  filter(exertype=="running") -> runners.wide)
 ```
 
 and then redo all the same analysis on this data frame:
@@ -318,6 +326,14 @@ d %>% count(fertilizer, class)
 
 All correct. The two fertilizer groups are very distinguishable based on yield and weight. 
 
+Prettier:
+
+```{r}
+d %>% count(fertilizer, class) %>% 
+  spread(class, n, fill=0)
+```
+
+
 The two `posterior` columns are how sure we are each plant was high or low fertilizer. Use `round` to avoid scientific notation:
 
 ```{r}
@@ -427,7 +443,7 @@ cv %>% mutate_at(vars(contains("_")), ~round(.,3)) %>% select(-c(y, smk, w))
 The wrong ones are more badly wrong this time. Why? Look again at LD plot:
 
 ```{r}
-ggplot(d, aes(x=w, y=y, colour=combo, label=combo))+
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
   geom_point()+geom_text_repel()
 ```
 
@@ -452,6 +468,7 @@ Most of the distinguishing is done by `LD1`. This depends (negatively) on attitu
 ```{r}
 p=predict(active.1)
 cbind(active, p) -> d
+d
 ```
 
 Plot individuals' scores by their actual job:
