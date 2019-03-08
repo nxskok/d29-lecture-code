@@ -10,6 +10,7 @@ library(ggbiplot)
 library(MASS)
 library(tidyverse)
 library(ggrepel)
+library(ggmap)
 ```
 
 ## Discriminant analysis continued
@@ -576,8 +577,96 @@ dd
 ```
 
 ```{r}
-ggplot(dd, aes(x=x.LD1, y=x.LD2, colour=factor(cluster), label=country)) + geom_point() + geom_text_repel(size=2) + guides(colour=F)
+ggplot(dd, aes(x=x.LD1, y=x.LD2, colour=factor(cluster), label=country)) + geom_point() + geom_text_repel(size=2) + guides(colour=F) 
+ggsave("graph.png")
 ```
 
 or, bigger, slide 465 (upside down vs. this).
+
+Hockey league
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/ontario-road-distances.csv"
+ontario=read_csv(my_url)
+ontario
+```
+
+These are distances, so back to `hclust`.
+
+Can we make a map first?
+
+**get your own Google Maps API key** and use it here. The free one is fine. I saved mine in a file.
+
+```{r}
+api_key=readRDS("apikey.rds")
+register_google(api_key)
+```
+
+Get the place names and look up lat-lon:
+
+```{r}
+tibble(place=ontario$place) %>% 
+  mutate(withon=str_c(place, " ON")) %>% 
+  mutate_geocode(withon) -> places
+places
+```
+
+```{r}
+map=get_map("Barrie", zoom=6)
+```
+
+```{r}
+ggmap(map) + geom_point(data=places, aes(x=lon, y=lat)) + geom_text_repel(data=places, aes(label=place))
+```
+
+
+```{r}
+ontario.d = ontario %>% select(-place) %>% as.dist()
+ontario.hc=hclust(ontario.d,method="ward.D")
+plot(ontario.hc)
+rect.hclust(ontario.hc,4)
+```
+
+One cluster is way too big. Try more clusters:
+
+```{r}
+plot(ontario.hc)
+rect.hclust(ontario.hc,7)
+```
+
+OK, now we can get creative:
+
+- Thunder Bay, Sault Ste Marie, Huntsville, North Bay as "northern division"
+- Brockville, Cornwall, Ottawa, Peterborough, Belleville, Kingston: "east"
+- Windsor, London, Sarnia: "west"
+- the rest: "central".
+
+Now, to get them on map. Get the 7-cluster solution and rejuggle:
+
+```{r}
+cutree(ontario.hc, 7) %>%  enframe(name="place", value="clus1") %>% 
+  mutate(division=case_when(clus1 == 1        ~ "Central",
+                            clus1 %in% c(2,3) ~ "Eastern",
+                            clus1 == 5        ~ "Western",
+                            TRUE              ~ "Northern"
+                           )) -> divs
+divs
+```
+
+Look up lats and longs of those places (which we already got):
+
+```{r}
+divs %>% left_join(places, by="place") -> with_divs
+with_divs
+```
+
+plot map with division coloured
+
+```{r}
+ggmap(map) + geom_point(data=with_divs, aes(x=lon, y=lat, colour=division)) + geom_text_repel(data=places, aes(label=place), size=2) +
+  guides(colour=F)
+ggsave("map2.png")
+```
+
+
 
