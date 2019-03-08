@@ -153,7 +153,6 @@ ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
 
 This plot suggests that the combos are mostly well distinguished. How are the predictions?
 
-predicted class and actual combo:
 
 ```{r}
 with(d, table(combo, class))
@@ -175,13 +174,13 @@ Bi-plot shows LDs and original variables:
 ggbiplot(peanuts.1, groups=factor(d$combo))
 ```
 
-Cross-validation: slide 369
+Points on the right are high on `w` and low on `y`; points on left vice versa.
 
-Fitting and prediction together:
+Cross-validation: fitting and prediction together:
 
 ```{r}
 peanuts.2=lda(combo~y+smk+w, data=peanuts_combo, CV=T)
-cbind(peanuts_combo, class=peanuts.2$class, peanuts.2$posterior) -> cv
+cbind(peanuts_combo, class=peanuts.2$class, posterior=peanuts.2$posterior) -> cv
 cv
 with(cv, table(obs=combo, pred=class))
 ```
@@ -199,4 +198,386 @@ ggplot(d, aes(x=x.LD1, y=x.LD2, colour=combo, label=combo))+
   geom_point()+geom_text_repel()
 ```
 
-Each prediction based on *omitting* the one being predicted. So if two plants for each combo a long way apart on plot a long way apart, each of them will probably be mistaken for something else. Eg. the `5_2` near the `8_1`s will almost certainly be classified as one of those. 
+Each prediction based on *omitting* the one being predicted. So if two plants for each combo a long way apart on plot a long way apart, each of them will probably be mistaken for something else. Eg. the `5_2` nearer the `8_1`s will almost certainly be classified as one of those. 
+
+### Remote sensing of crops
+
+Measure four variables `x1` through `x4` from aerial photographs. Use them to determine which of five crops are being grown in the fields being photographed.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/remote-sensing.txt"
+crops=read_table(my_url)
+crops
+```
+
+Which variables are important?
+
+```{r}
+crops.1=lda(crop~x1+x2+x3+x4, data=crops)
+crops.1
+```
+
+Should look at LD1 and (maybe) LD2, but not the others.
+
+LD1 depends mainly on `x1`, LD2 mainly on `x3`.
+
+What we really care about is how distinguishable the crops are. So plot scores on LD1 and LD2, distinguished by crop:
+
+```{r}
+p=predict(crops.1)
+cbind(crops, p) %>% mutate_at(vars(starts_with("posterior")), ~round(., 3)) -> d
+d
+```
+
+```{r}
+ggplot(d, aes(x=x.LD1, y=x.LD2, colour=crop))+geom_point()
+```
+
+Pretty awful! Maybe corn is distinguishable from the rest, and maybe (somewhat) soybeans, but clover is all over the place!
+
+Biplot shows connection with original x's:
+
+```{r}
+ggbiplot(crops.1, groups=crops$crop)
+```
+
+`x1` distinguishes some of the crops:
+
+```{r}
+ggplot(crops, aes(x=crop, y=x1)) + geom_boxplot()
+```
+
+and maybe `x3` some of the others:
+
+```{r}
+ggplot(crops, aes(x=crop, y=x3)) + geom_boxplot()
+```
+
+but not very convincingly.
+
+Expect the predictions to be pretty awful:
+
+```{r}
+with(d, table(crop, class))
+```
+
+Almost all of the corn are gotten right, and half of the soybeans (and surprisingly half of the clover). Expect the posterior probabilities to be pretty unclear:
+
+```{r}
+d %>% select(crop, class, starts_with("posterior")) -> d3
+d3
+```
+
+just the clover:
+
+```{r}
+d3 %>% filter(crop=="Clover")
+```
+
+just the corn:
+
+```{r}
+d3 %>% filter(crop=="Corn")
+```
+
+
+Even the actual corn has a mostly less than 50% posterior probability of being corn, based on `x1` through `x4`. Some of the clover is likely clover, but some of it is more likely something else!
+
+
+## Cluster analysis
+
+slide 403
+
+### one to ten
+
+slides 405-407
+
+slides 408-415
+
+the dissimilarity data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/languages.txt"
+number.d=read_table(my_url)
+number.d
+```
+
+making a distance object (for input to clustering)
+
+```{r}
+d = number.d %>%
+select(-la) %>%
+as.dist()
+d
+```
+
+single-linkage (nearest-neighbour) clustering
+
+```{r}
+d.hc=hclust(d, method="single")
+plot(d.hc)
+```
+
+The clustering process
+
+```{r}
+d.hc$labels %>% enframe()
+```
+
+```{r}
+d.hc$merge
+```
+
+- languages 2 and 3 combined (Norwegian and Danish)
+- languages 6 and 8 combined (French and Italian)
+- language 7 (Spanish) combined with cluster formed at step 2 (French and Italian)
+- language 1 (English) combined with cluster of step 1 (Norwegian and Danish)
+...
+- language 11 (Finnish) combined with cluster of step 9 (everything else).
+
+Complete linkage:
+
+```{r}
+d.hc=hclust(d,method="complete")
+plot(d.hc)
+```
+
+Requires *whole cluster* to be similar before joining.
+
+Ward's method:
+
+```{r}
+d.hc=hclust(d,method="ward.D")
+plot(d.hc)
+```
+
+Tends to form small clusters first, then join those.
+
+
+
+Which clusters are the languages in? This one is Ward. I think three clusters is good. (Look for a vertical distance on the tree where the clustering doesn't change.300dart
+)
+
+```{r}
+cutree(d.hc,3)
+```
+
+or
+
+```{r}
+cutree(d.hc,3) %>% enframe(name="language", value="cluster")
+```
+
+Drawing the tree with a given number of clusters:
+
+```{r}
+plot(d.hc)
+rect.hclust(d.hc,3)
+```
+
+How did I make those dissimilarities?
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/one-ten.txt"
+lang=read_delim(my_url," ")
+lang
+```
+
+Extract first letter. To do that, get all the number names in one column:
+
+```{r}
+lang %>% mutate(number=1:10) %>%
+  gather(language,name,-number) %>%
+  mutate(first=str_sub(name,1,1)) -> lang_long
+lang_long
+```
+
+Dissimilarity between English and Norwegian: the number of first letters that are different.
+
+English
+
+```{r}
+(lang_long %>% filter(language=="en") -> english)
+```
+
+Norwegian
+
+```{r}
+(lang_long %>% filter(language=="no") -> norwegian)
+```
+
+Put them side by side, matched by number:
+
+```{r}
+english %>% left_join(norwegian, by="number")
+```
+
+Count the different ones:
+
+```{r}
+english %>% left_join(norwegian, by="number") %>%
+  mutate(different=(first.x!=first.y)) %>%
+  summarize(diff=sum(different))
+```
+
+1 and 8 start with different letter, rest same.
+
+Function to do this:
+
+```{r}
+countdiff=function(lang.1,lang.2,d) {
+  lang1d=d %>% filter(language==lang.1)
+  lang2d=d %>% filter(language==lang.2)
+  lang1d %>% left_join(lang2d, by="number") %>%
+  mutate(different=(first.x!=first.y)) %>%
+  summarize(diff=sum(different)) %>%
+  pull(diff)
+}
+```
+
+Test:
+
+```{r}
+countdiff("en", "no", lang_long)
+```
+
+To do with all pairs of languages, first need the languages:
+
+```{r}
+languages=names(lang)
+languages
+```
+
+then all pairs of them:
+
+```{r}
+pairs=crossing(lang=languages, lang2=languages)
+pairs
+```
+
+For each lang and lang2 in parallel, run countdiff:
+
+```{r}
+(pairs %>% 
+  mutate(diff=map2_int(lang, lang2, ~countdiff(.x, .y, lang_long))) -> thediffs)
+```
+
+make square table:
+
+```{r}
+thediffs %>% spread(lang2, diff)
+```
+
+which was where we began.
+
+### Birth, death and infant mortality
+
+slide 436
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/birthrate.txt"
+vital=read_table(my_url)
+vital
+```
+
+slide 439 about standardizing
+
+```{r}
+(vital %>% mutate_if(is.numeric, ~scale(.)) -> vital.s)
+```
+
+Try for 3 clusters (why? later.)
+
+```{r}
+vital.s %>% select(-country) %>% kmeans(3) -> vital.km3
+vital.km3
+```
+
+so obtain things by name:
+
+```{r}
+vital.km3$size
+```
+
+```{r}
+vital.km3$cluster
+```
+
+```{r}
+vital.km3$centers
+```
+
+```{r}
+vital.km3$withinss
+```
+
+```{r}
+d=cbind(vital.s, vital.km3$cluster)
+View(d, "K-means clustering")
+```
+
+slide 447 re randomization and `nstart`
+
+To figure out how many clusters, work out (for each candidate #clusters) a measure of goodness of fit for that many clusters, such as `tot.withinss`:
+
+
+
+
+```{r}
+vital.s %>% select(-country) -> vv
+tibble(clusters=2:20) %>% mutate(km=map(clusters, ~kmeans(vv, ., nstart=20))) %>% 
+  mutate(ss=map_dbl(km, "tot.withinss")) -> twss
+twss
+```
+
+plot against number of clusters, joined by lines, called **scree plot**:
+
+```{r}
+ggplot(twss, aes(x=clusters, y=ss)) + geom_point() + geom_line()
+```
+
+Look for "elbow" sticking out to *bottom*, eg at 6 clusters.
+
+Suggests that 6 clusters would be good:
+
+```{r}
+vital.s %>% select(-country) %>% kmeans(6, nstart=20) -> vital.km6
+d=cbind(vital.s, cluster=vital.km6$cluster)
+View(d, "six clusters")
+```
+
+Compare three-cluster and six-cluster solutions:
+
+```{r}
+table(vital.km3$cluster, vital.km6$cluster)
+```
+
+Clusterings are mostly but not completely similar:
+
+- most of old cluster 1 is new cluster 6, but some to cluster 5
+- most of old cluster 2 is new cluster 2, but some to cluster 4
+- most of old cluster 3 is new cluster 4, but some to cluster 4 or 6.
+
+(Slightly different from one in slides: randomization.)
+
+To get picture out of K-means, run a discriminant analysis on clusters as if known groups:
+
+```{r}
+vital.lda=lda(cluster~birth+death+infant,data=d)
+vital.lda
+```
+
+Ignore LD3, so can plot LD1 vs LD2:
+
+```{r}
+p=predict(vital.lda)
+dd=cbind(d, p)
+dd
+```
+
+```{r}
+ggplot(dd, aes(x=x.LD1, y=x.LD2, colour=factor(cluster), label=country)) + geom_point() + geom_text_repel(size=2) + guides(colour=F)
+```
+
+or, bigger, slide 465 (upside down vs. this).
+
