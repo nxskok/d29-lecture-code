@@ -598,7 +598,7 @@ Can we make a map first?
 **get your own Google Maps API key** and use it here. The free one is fine. I saved mine in a file.
 
 ```{r}
-api_key=readRDS("apikey.rds")
+api_key=Sys.getenv("api_key")
 register_google(api_key)
 ```
 
