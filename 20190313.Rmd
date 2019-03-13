@@ -24,6 +24,7 @@ my_url="http://www.utsc.utoronto.ca/~butler/d29/profile.txt"
 active=read_delim(my_url," ")
 active
 active.1=lda(job~reading+dance+tv+ski,data=active)
+active.1
 ```
 
 and we decided that the jobs were pretty distinguishable by how the people in those jobs rated the leisure activities:
@@ -41,7 +42,7 @@ ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job)) + geom_point() + geom_te
 People that like dancing are on the left, people that like TV-watching are at the bottom:
 
 ```{r}
-active.1
+d
 ```
 
 The predictions got everyone right:
@@ -291,6 +292,10 @@ look at the clover (diverse) and the corn (compact).
 
 Even the actual corn has a mostly less than 50% posterior probability of being corn, based on `x1` through `x4`. Some of the clover is likely clover, but some of it is more likely something else!
 
+```{r}
+crops
+```
+
 
 ## Cluster analysis
 
@@ -313,9 +318,9 @@ number.d
 making a distance object (for input to clustering)
 
 ```{r}
-d = number.d %>%
+number.d %>%
 select(-la) %>%
-as.dist()
+as.dist() -> d
 d
 ```
 
@@ -424,7 +429,7 @@ Count the different ones:
 
 ```{r}
 english %>% left_join(norwegian, by="number") %>%
-  mutate(different=(first.x!=first.y)) %>%
+  mutate(different=(first.x!=first.y)) %>% 
   summarize(diff=sum(different))
 ```
 
