@@ -24,6 +24,7 @@ my_url="http://www.utsc.utoronto.ca/~butler/d29/profile.txt"
 active=read_delim(my_url," ")
 active
 active.1=lda(job~reading+dance+tv+ski,data=active)
+active.1
 ```
 
 and we decided that the jobs were pretty distinguishable by how the people in those jobs rated the leisure activities:
@@ -41,7 +42,7 @@ ggplot(d, aes(x=x.LD1, y=x.LD2, colour=job, label=job)) + geom_point() + geom_te
 People that like dancing are on the left, people that like TV-watching are at the bottom:
 
 ```{r}
-active.1
+d
 ```
 
 The predictions got everyone right:
@@ -218,7 +219,7 @@ crops.1=lda(crop~x1+x2+x3+x4, data=crops)
 crops.1
 ```
 
-Should look at LD1 and (maybe) LD2, but not the others.
+Should look at LD1 and LD2, but not the others.
 
 LD1 depends mainly on `x1`, LD2 mainly on `x3`.
 
@@ -262,27 +263,38 @@ Expect the predictions to be pretty awful:
 with(d, table(crop, class))
 ```
 
-Almost all of the corn are gotten right, and half of the soybeans (and surprisingly half of the clover). Expect the posterior probabilities to be pretty unclear:
+Almost all of the corn are gotten right, and half of the soybeans (and surprisingly half of the clover). 
+
+Alternatively:
+
+```{r}
+d %>% count(crop, class)
+```
+
+or,
+
+```{r}
+d %>% count(crop, class) %>% 
+  spread(class, n, fill=0)
+```
+
+Expect the posterior probabilities to be pretty unclear:
 
 ```{r}
 d %>% select(crop, class, starts_with("posterior")) -> d3
-d3
+d3 %>% rename_at(vars(starts_with("posterior")), 
+                 ~str_replace(., "posterior","p")) %>% View("posterior")
 ```
 
-just the clover:
+look at the clover (diverse) and the corn (compact).
 
-```{r}
-d3 %>% filter(crop=="Clover")
-```
-
-just the corn:
-
-```{r}
-d3 %>% filter(crop=="Corn")
-```
 
 
 Even the actual corn has a mostly less than 50% posterior probability of being corn, based on `x1` through `x4`. Some of the clover is likely clover, but some of it is more likely something else!
+
+```{r}
+crops
+```
 
 
 ## Cluster analysis
@@ -306,9 +318,9 @@ number.d
 making a distance object (for input to clustering)
 
 ```{r}
-d = number.d %>%
+number.d %>%
 select(-la) %>%
-as.dist()
+as.dist() -> d
 d
 ```
 
@@ -356,8 +368,8 @@ Tends to form small clusters first, then join those.
 
 
 
-Which clusters are the languages in? This one is Ward. I think three clusters is good. (Look for a vertical distance on the tree where the clustering doesn't change.300dart
-)
+Which clusters are the languages in? This one is Ward. I think three clusters is good. 
+(Look for a vertical distance on the tree where the clustering doesn't change)
 
 ```{r}
 cutree(d.hc,3)
@@ -417,7 +429,7 @@ Count the different ones:
 
 ```{r}
 english %>% left_join(norwegian, by="number") %>%
-  mutate(different=(first.x!=first.y)) %>%
+  mutate(different=(first.x!=first.y)) %>% 
   summarize(diff=sum(different))
 ```
 

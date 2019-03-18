@@ -311,7 +311,7 @@ coord_fixed()
 
 test scores really vary along *one* dimension.
 
-### Biplot
+#### Biplot
 
 Individuals and component scores with original variables labelled
 
@@ -319,4 +319,13 @@ Individuals and component scores with original variables labelled
 ggbiplot(test12.pc,labels=test12$id)
 ```
 
-High scorers on both tests are on the *right*, low scores on the left
+High scorers on both tests are on the *right*, low scores on the left.
+
+### Track running data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/men_track_field.txt"
+track=read_table2(my_url)
+track
+```
+
