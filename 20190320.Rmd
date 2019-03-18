@@ -263,7 +263,9 @@ Scree plot is kind of dumb:
 ggscreeplot(test12.pc)
 ```
 
-imagine it continuing to right  at zero: 2 is a big below, so take $2-1=1$ component.
+imagine it continuing to rightat zero: 2 is a big below, so take $2-1=1$ component. 
+
+Note difference from discriminant analysis: want last one *on mountain*, not first one on scree, so go back one from elbow.
 
 How are PCs related to test scores?
 
@@ -325,7 +327,36 @@ High scorers on both tests are on the *right*, low scores on the left.
 
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/men_track_field.txt"
-track=read_table2(my_url)
+track=read_table(my_url)
 track
 ```
 
+Some of these are seconds, some are minutes. Countries are (usually) Internet domain codes (ISO 2-letter codes):
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/isocodes.csv"
+iso=read_csv(my_url)
+iso
+```
+
+slide 557
+
+#### fit and examine principal components
+
+```{r}
+track_num = track %>% select_if(is.numeric)
+track.pc=princomp(track_num,cor=T)
+summary(track.pc)
+```
+
+Scree plot
+
+```{r}
+ggscreeplot(track.pc)
+```
+
+Elbows at 2 (one component) and 3 (two components).
+
+Two components explain 94% of variability (vs 83% for one), so go with two. 
+
+Taking more components will increase % variability explained, but not much, so stopping at two makes sense.
