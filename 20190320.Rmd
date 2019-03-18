@@ -359,4 +359,155 @@ Elbows at 2 (one component) and 3 (two components).
 
 Two components explain 94% of variability (vs 83% for one), so go with two. 
 
-Taking more components will increase % variability explained, but not much, so stopping at two makes sense.
+Taking more components will increase % variability explained, but not much, so stopping at two makes sense. (Slide 560.)
+
+
+How do components depend on original variables?
+
+```{r}
+track.pc$loadings
+```
+
+Component 1 has basically equal weights all the way down: component 1 score is high if all the distance records are high (that is, if country *bad* at running). 
+
+Component 2 distinguishes sprinting (short-distance running) from long-distance running: component 2 score is high if country bad at sprinting / good at distance running.
+
+Make data frame of component scores and country names:
+
+```{r}
+track.pc$scores %>% as_tibble() %>%
+  select(1:2) %>% 
+  bind_cols(country=track$country) -> d
+d
+```
+
+Plot with countries labelled (I resized this)
+
+```{r fig.height=15, fig.width=15}
+ggplot(d,aes(x=Comp.1,y=Comp.2,
+label=country))+
+geom_point()+geom_text_repel()+
+coord_fixed()
+```
+
+Let's look up some countries:
+
+```{r}
+iso
+```
+
+
+
+Bad running countries
+
+```{r}
+v=c("ck", "ws")
+tibble(want=v) %>% left_join(iso, by=c("want"="ISO2"))
+```
+
+interlude: write a function to do this
+
+```{r}
+lookup=function(v, iso) {
+  tibble(want=v) %>% left_join(iso, by=c("want"="ISO2"))
+}
+lookup(v, iso)
+```
+
+Good running countries
+
+```{r}
+v=c("de", "au", "uk", "it", "us", "ru")
+lookup(v, iso)
+```
+
+good at distance running relative to sprinting
+
+```{r}
+w=c("nz", "ir", "tr", "pt", "mx", "no", "kp", "ke")
+lookup(w, iso)
+```
+
+good at sprinting relative to distance running
+
+```{r}
+w=c("us", "ru", "it", "bm", "do")
+lookup(w, iso)
+```
+
+biplot
+
+```{r fig.height=12, fig.width=12}
+ggbiplot(track.pc,labels=track$country)
+```
+
+countries at the "front" of the arrows have *high* record times (bad), eg Cook Islands for 100m, Western Samoa for marathon.
+
+countries at the opposite ends of the arrows (extended backwards) have *low* record times (good), eg. US for 100m, New Zealand for marathon.
+
+Picture shows: good at running (left) vs bad at running (right); relatively good at distance running (top), good at sprinting (bottom).
+
+Best 8 running countries?
+
+```{r}
+d %>% arrange(Comp.1) %>%
+  left_join(iso,by=c("country"="ISO2")) %>%
+  select(Comp.1,country,Country) %>%
+  slice(1:8)
+```
+
+plot with country names:
+
+```{r fig.height=15, fig.width=15}
+d %>% left_join(iso,by=c("country"="ISO2")) %>%
+  select(Comp.1,Comp.2,Country) %>%
+  ggplot(aes(x=Comp.1,y=Comp.2,label=Country))+
+  geom_point()+geom_text_repel()+
+  coord_fixed()
+```
+
+with the full country names, there is more overwriting.
+
+### principal components from correlation matrix
+
+store in file and read in:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/cov.txt"
+mat=read_table(my_url,col_names=F)
+mat
+```
+
+correlations between three variables X1-X3.
+
+```{r}
+mat %>% as.matrix() %>%
+princomp(covmat=.) -> mat.pc
+summary(mat.pc)
+```
+
+there is one component, which we can also see with a screeplot:
+
+```{r}
+ggscreeplot(mat.pc)
+```
+
+Clear elbow at 2, so one component.
+
+Compare original correlation matrix:
+
+```{r}
+mat
+```
+
+with loadings
+
+```{r}
+mat.pc$loadings
+```
+
+component 1 is large when X1 and X2 are large, X3 small. Small for opposite.
+
+Correlation matrix says that one of these is likely to happen, so data are basically one-dimensional.
+
+see slide 579.
