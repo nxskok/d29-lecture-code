@@ -77,7 +77,7 @@ vital.km3$tot.withinss
 
 
 ```{r}
-d=cbind(vital.s, vital.km3$cluster)
+d=cbind(vital.s, cluster=vital.km3$cluster)
 View(d, "K-means clustering")
 ```
 
@@ -90,6 +90,7 @@ To figure out how many clusters, work out (for each candidate #clusters) a measu
 
 ```{r}
 vital.s %>% select(-country) -> vv
+vv
 tibble(clusters=2:20) %>% 
   mutate(km=map(clusters, ~kmeans(vv, ., nstart=20))) %>% 
   mutate(ss=map_dbl(km, "tot.withinss")) -> twss
@@ -120,9 +121,9 @@ table(vital.km3$cluster, vital.km6$cluster)
 
 Clusterings are mostly but not completely similar:
 
-- most of old cluster 1 is new cluster 6, but some to cluster 5
-- most of old cluster 2 is new cluster 2, but some to cluster 4
-- most of old cluster 3 is new cluster 4, but some to cluster 4 or 6.
+- most of old cluster 1 is new cluster 2, but some to cluster 3
+- most of old cluster 2 is new cluster 6, but some to cluster 4
+- most of old cluster 3 is new cluster 1, but some to cluster 2 or 4.
 
 (Slightly different from one in slides: randomization.)
 
@@ -164,7 +165,7 @@ Can we make a map first?
 
 ```{r}
 api_key=Sys.getenv("api_key")
-register_google(api_key)
+ggmap::register_google(api_key)
 ```
 
 Get the place names and look up lat-lon:
@@ -187,7 +188,7 @@ ggmap(map) + geom_point(data=places, aes(x=lon, y=lat)) + geom_text_repel(data=p
 
 ```{r}
 ontario.d = ontario %>% select(-place) %>% as.dist()
-ontario.hc=hclust(ontario.d,method="ward.D")
+ontario.hc=hclust(ontario.d, method="ward.D")
 plot(ontario.hc)
 rect.hclust(ontario.hc,4)
 ```
@@ -300,6 +301,7 @@ Component scores
 ```{r}
 d=cbind(test12,test12.pc$scores) 
 d
+View(d, "principal component scores")
 ```
 
 - Person A is a low scorer
@@ -422,6 +424,7 @@ Bad running countries
 
 ```{r}
 v=c("ck", "ws")
+v
 tibble(want=v) %>% left_join(iso, by=c("want"="ISO2"))
 ```
 
@@ -437,7 +440,7 @@ lookup(v, iso)
 Good running countries
 
 ```{r}
-v=c("de", "au", "uk", "it", "us", "ru")
+v=c("de", "au", "uk", "it", "us", "ru", "dex")
 lookup(v, iso)
 ```
 
