@@ -1,0 +1,235 @@
+---
+title: "March 27"
+output: html_notebook
+---
+
+## packages
+
+```{r}
+library(tidyverse)
+library(ggbiplot)
+```
+
+
+## principal components from correlation matrix
+
+store in file and read in:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/cov.txt"
+mat=read_table(my_url,col_names=F)
+mat
+```
+
+correlations between three variables X1-X3.
+
+```{r}
+mat %>% as.matrix() %>%
+princomp(covmat=.) -> mat.pc
+summary(mat.pc)
+```
+
+there is one component, which we can also see with a screeplot:
+
+```{r}
+ggscreeplot(mat.pc)
+```
+
+Clear elbow at 2, so one component.
+
+Compare original correlation matrix:
+
+```{r}
+mat
+```
+
+with loadings
+
+```{r}
+mat.pc$loadings
+```
+
+component 1 is large when X1 and X2 are large, X3 small. Small for opposite.
+
+Correlation matrix says that one of these is likely to happen, so data are basically one-dimensional.
+
+see slide 579.
+
+## factor analysis
+
+slide 581
+
+### children test scores
+
+slide 583
+
+read in data (correlation matrix)
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/rex2.txt"
+kids = read_delim(my_url," ")
+kids
+```
+
+first run principal components to get scree plot
+
+```{r}
+kids %>%
+  select_if(is.numeric) %>%
+  as.matrix() %>%
+  princomp(covmat=.) -> kids.pc
+ggscreeplot(kids.pc)
+```
+
+Elbow at 3, two components / factors.
+
+```{r}
+kids.pc$loadings
+```
+
+- first component has some of everything
+- second component mainly `add` and `dots`
+- not clear
+
+  slide 587
+  
+```{r}
+kids %>%
+  select_if(is.numeric) %>%
+  as.matrix() -> km
+km2=list(cov=km,n.obs=145)
+kids.f2=factanal(factors=2,covmat=km2)
+```
+
+Uniquenesses (slide 589)
+
+```{r}
+kids.f2$uniquenesses
+```
+
+Loadings
+
+```{r}
+kids.f2$loadings
+```
+
+slide 590
+
+Are two factors enough?
+
+```{r}
+kids.f2$PVAL
+```
+
+2 factors not rejected, so enough.
+
+Would  1 factor have been enough?
+
+```{r}
+kids.f1=factanal(factors=1,covmat=km2)
+kids.f1$PVAL
+```
+
+No: we need 2 factors.
+
+### track running records revisited
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/men_track_field.txt"
+track=read_table(my_url)
+
+my_url="http://www.utsc.utoronto.ca/~butler/d29/isocodes.csv"
+iso=read_csv(my_url)
+
+track_num = track %>% select_if(is.numeric)
+track.pc=princomp(track_num,cor=T)
+ggbiplot(track.pc,labels=track$country)
+```
+
+
+principal component dimensions are good-bad (left-right), sprinting-distance (up-down).
+
+What happens when we do factor analysis? Slide 594.
+
+```{r}
+track %>% select_if(is.numeric) %>%
+factanal(2,scores="r") -> track.f
+```
+
+Biplot (not ggplot):
+
+```{r fig.height=12, fig.width=12}
+biplot(track.f$scores,track.f$loadings, xlabs=track$country)
+```
+
+100m points up, and marathon points across. Suggests two dimensions will be more clearly sprinting and distance running. Note "rotation" of variables on biplot.
+
+```{r}
+track.f$loadings
+```
+
+factor 1, highesy loadings on long distance, factor 2 highest loadings on sprinting.
+
+Which countries are best at distance running or sprinting? Most negative scores on factor 1, 2 respectively.
+
+Make data frame with  country abbreviations and factor scores, and add country names. (Compare what happens if I use `cbind`.)
+
+```{r}
+data.frame(country=track$country, track.f$scores) %>% 
+  left_join(iso,by=c("country"="ISO2")) -> d
+d
+```
+
+best distance-running countries:
+
+```{r}
+d %>% arrange(Factor1)
+```
+
+best sprinting countries:
+
+```{r}
+d %>% arrange(Factor2)
+```
+
+### BEM sex role inventory
+
+slide 602-603.
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/factor.txt"
+bem=read_tsv(my_url)
+bem
+```
+
+use principal components to decide how many factors:
+
+```{r}
+bem %>% select(-subno) %>% princomp(cor=T) -> bem.pc
+ggscreeplot(bem.pc)
+```
+
+Hard to see. Looking for a reasonably small number of factors:
+
+```{r}
+ggscreeplot(bem.pc)+scale_x_continuous(limits=c(0,8))
+```
+
+Maybe elbows at 3 (2 factors) or 6 (5 factors).
+
+But:
+
+```{r}
+summary(bem.pc)
+```
+
+2 factors explains only 29% of variability, and 5 only 43%. We are only going to be able to do so well here.
+
+Biplot:
+
+```{r fig.height=12, fig.width=12}
+ggbiplot(bem.pc,alpha=0.3)
+```
+
+
+## time series

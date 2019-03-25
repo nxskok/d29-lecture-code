@@ -1,7 +1,23 @@
 ---
 title: "March 20"
-output: html_notebook
+output: 
+  html_notebook:
+      code_download:true
 ---
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
 
 ## Packages
 
@@ -488,46 +504,3 @@ d %>% left_join(iso,by=c("country"="ISO2")) %>%
 
 with the full country names, there is more overwriting.
 
-### principal components from correlation matrix
-
-store in file and read in:
-
-```{r}
-my_url="http://www.utsc.utoronto.ca/~butler/d29/cov.txt"
-mat=read_table(my_url,col_names=F)
-mat
-```
-
-correlations between three variables X1-X3.
-
-```{r}
-mat %>% as.matrix() %>%
-princomp(covmat=.) -> mat.pc
-summary(mat.pc)
-```
-
-there is one component, which we can also see with a screeplot:
-
-```{r}
-ggscreeplot(mat.pc)
-```
-
-Clear elbow at 2, so one component.
-
-Compare original correlation matrix:
-
-```{r}
-mat
-```
-
-with loadings
-
-```{r}
-mat.pc$loadings
-```
-
-component 1 is large when X1 and X2 are large, X3 small. Small for opposite.
-
-Correlation matrix says that one of these is likely to happen, so data are basically one-dimensional.
-
-see slide 579.
