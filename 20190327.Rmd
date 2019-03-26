@@ -6,8 +6,8 @@ output: html_notebook
 ## packages
 
 ```{r}
-library(tidyverse)
 library(ggbiplot)
+library(tidyverse)
 ```
 
 
@@ -406,11 +406,6 @@ library(forecast)
 
 ## Time trends
 
-```{r,echo=FALSE}
-opts_chunk$set(fig.cap="")
-```
-
-
 * Assess existence or nature of time trends with:
   * correlation
   * regression ideas.
@@ -463,7 +458,7 @@ slope=theil_sen_slope(temp$temperature)
 slope
 ```
 
-this is degrees per year. Doesn't seem like much, but over 130 years of data is
+this is degrees C per year. Doesn't seem like much, but over 130 years of data is
 
 ```{r}
 130*slope
@@ -561,7 +556,6 @@ from January 1946 to December 1959:
 ```{r}
 my_url="http://www.utsc.utoronto.ca/~butler/d29/nybirths.txt"
 ny=read_table(my_url,col_names=F)
-ny
 ny.ts=ts(ny,freq=12,start=c(1946,1))
 ny.ts
 ```
