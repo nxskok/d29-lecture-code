@@ -202,6 +202,29 @@ bem=read_tsv(my_url)
 bem
 ```
 
+Traits have abbreviated names. Scores on 7-point scale: 1=strongly disagree, 7=strongly agree.
+
+Side track: make a lookup table. First need all (distinct) short names:
+
+```{r}
+bem %>% gather(trait, score, -subno) %>% distinct(trait) %>% write_csv("traits.csv")
+```
+
+then open `traits.csv` with spreadsheet, add new column with full traits in `trait_full`.
+
+then read this back in:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/traits.csv"
+traits=read_csv(my_url)
+traits
+```
+
+
+
+
+
+
 use principal components to decide how many factors:
 
 ```{r}
@@ -223,7 +246,7 @@ But:
 summary(bem.pc)
 ```
 
-2 factors explains only 29% of variability, and 5 only 43%. We are only going to be able to do so well here.
+2 factors explains only 29% of variability, and 5 only 43%. We are not going to be able to do so well here.
 
 Biplot:
 
@@ -231,5 +254,130 @@ Biplot:
 ggbiplot(bem.pc,alpha=0.3)
 ```
 
+A lot of variables point to 1 o'clock or 4 o'clock. A rotation might point them up-down or left-right.
+
+2 factors (may be bad):
+
+```{r}
+bem.2 = bem %>% select(-subno) %>% factanal(factors=2, scores="r")
+bem.2
+```
+
+Did we rotate?
+
+```{r fig.height=12, fig.width=12}
+biplot(bem.2$scores,bem.2$loadings, xlabs=bem$subno)
+```
+
+Most of the red arrows now go up or right, so factors ought to have (somewhat) clearer structure.
+
+
+What is factor 1 made of?
+
+Trickiness first:
+
+```{r}
+bem.2$loadings
+class(bem.2$loadings) # not a data frame
+bem.2$loadings %>% unclass() %>% as.data.frame() %>% rownames_to_column("trait") -> bem.loadings
+bem.loadings
+```
+
+Look up full trait names:
+
+```{r}
+(bem.loadings %>% left_join(traits) -> bem.loadings)
+```
+
+
+```{r}
+bem.loadings %>% arrange(desc(abs(Factor1)))
+```
+
+and factor 2?
+
+```{r}
+bem.loadings %>% arrange(desc(abs(Factor2)))
+```
+
+Clearly two very different types of traits.
+
+Go back to biplot, now looking for unusual *individuals*. The numbers are subject numbers in `subno`:
+
+```{r fig.height=12, fig.width=12}
+biplot(bem.2$scores,bem.2$loadings, xlabs=bem$subno)
+```
+
+On factor 2, 755 high and 534 low:
+
+```{r}
+bem %>% filter(subno %in% c(755, 534)) %>% gather(trait, score, -subno) %>% spread(subno, score) -> extreme_2
+extreme_2
+```
+
+but we need to look at the columns *which load highly on factor 2*:
+
+```{r}
+bem.loadings
+```
+
+```{r}
+extreme_2 %>% left_join(bem.loadings) %>% arrange(desc(abs(Factor2)))
+```
+
+Subject 755 scores highly on these traits (and even low on "masculine" with negative loading!)
+Subject 534 scores at least relatively low on these traits.
+
+Repeat with factor 1: 404 high and 708 low:
+
+```{r}
+bem %>% filter(subno %in% c(404, 708)) %>% gather(trait, score, -subno) %>% spread(subno, score) %>% 
+  left_join(bem.loadings) %>% arrange(desc(abs(Factor1)))
+```
+
+subject 404 is a high scorer on everything (and a low scorer on "shy" with negative loading)
+subject 708 is mainly a low scorer on these.
+
+Try a crazy number of factors like 15(!)
+
+```{r}
+bem %>% select(-subno) %>%
+  factanal(factors=15) -> bem.15
+```
+
+and then see what each factor has in it. Loadings first, with full trait names
+
+```{r}
+bem.15$loadings %>% unclass() %>% as.data.frame() %>% rownames_to_column("trait") %>% 
+  left_join(traits) -> bem.loadings
+bem.loadings
+```
+
+```{r}
+bem.loadings %>% gather(factor, score, starts_with("Factor")) -> loadings.long
+loadings.long
+```
+
+```{r}
+high_loadings=function(factor_name) {
+  loadings.long %>% filter(factor==factor_name) %>% 
+  arrange(desc(abs(score)))
+}
+```
+
+then do it for any factor
+
+```{r}
+factor_name="Factor15"
+high_loadings(factor_name)
+```
+
+but, if we look at the uniquenesses:
+
+```{r}
+enframe(bem.15$uniquenesses, name="trait") %>% arrange(desc(value)) %>% left_join(traits)
+```
+
+some of these are still very high, so even 15 factors is not catching everything.
 
 ## time series
