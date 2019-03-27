@@ -83,7 +83,14 @@ mat.pc$loadings
 
 component 1 is large when X1 and X2 are large, X3 small. Small for opposite.
 
-Correlation matrix says that one of these is likely to happen, so data are basically one-dimensional.
+Correlation matrix says that one of these is likely to happen:
+
+```{r}
+mat
+```
+
+
+so data are basically one-dimensional.
 
 see slide 579.
 
@@ -129,6 +136,9 @@ kids.pc$loadings
 kids %>%
   select_if(is.numeric) %>%
   as.matrix() -> km
+km
+rownames(km)=colnames(km)
+km
 km2=list(cov=km,n.obs=145)
 kids.f2=factanal(factors=2,covmat=km2)
 ```
@@ -200,7 +210,7 @@ biplot(track.f$scores,track.f$loadings, xlabs=track$country)
 track.f$loadings
 ```
 
-factor 1, highesy loadings on long distance, factor 2 highest loadings on sprinting.
+factor 1, highest loadings on long distance, factor 2 highest loadings on sprinting.
 
 Which countries are best at distance running or sprinting? Most negative scores on factor 1, 2 respectively.
 
