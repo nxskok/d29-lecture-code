@@ -8,8 +8,40 @@ output: html_notebook
 ```{r}
 library(ggbiplot)
 library(tidyverse)
+library(ggrepel)
 ```
 
+## reminder: track running records
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/men_track_field.txt"
+track=read_table(my_url)
+track
+```
+
+8 variables. Can we make 2 composite variables out of these to understand the data more easily?
+
+```{r}
+track_num = track %>% select_if(is.numeric)
+track.pc=princomp(track_num, cor=T)
+summary(track.pc)
+```
+
+Two components explain most (94%) of the variability (scree plot also suggests two).
+
+Plot component scores for first two components labelled by the country they belong to:
+
+```{r fig.height=15, fig.width=15}
+track.pc$scores %>% as_tibble() %>%
+  select(1:2) %>% 
+  bind_cols(country=track$country) -> d
+d
+ggplot(d,aes(x=Comp.1, y=Comp.2, label=country))+
+  geom_point()+geom_text_repel()+
+  coord_fixed()
+```
+
+Good (left) vs bad (right); better at distance running (top) vs sprinting (bottom).
 
 ## principal components from correlation matrix
 
