@@ -27,11 +27,11 @@ track.pc=princomp(track_num, cor=T)
 summary(track.pc)
 ```
 
-Two components explain most (94%) of the variability (scree plot also suggests two).
+Two components explain most (94%) of the variability (scree plot also suggests two, with elbow at 3).
 
 Plot component scores for first two components labelled by the country they belong to:
 
-```{r fig.height=15, fig.width=15}
+```{r}
 track.pc$scores %>% as_tibble() %>%
   select(1:2) %>% 
   bind_cols(country=track$country) -> d
@@ -78,6 +78,7 @@ mat
 with loadings
 
 ```{r}
+mat
 mat.pc$loadings
 ```
 
@@ -200,7 +201,7 @@ factanal(2,scores="r") -> track.f
 
 Biplot (not ggplot):
 
-```{r fig.height=12, fig.width=12}
+```{r}
 biplot(track.f$scores,track.f$loadings, xlabs=track$country)
 ```
 
@@ -307,7 +308,7 @@ bem.2
 
 Did we rotate?
 
-```{r fig.height=12, fig.width=12}
+```{r fig.height=10, fig.width=10}
 biplot(bem.2$scores,bem.2$loadings, xlabs=bem$subno)
 ```
 
@@ -364,7 +365,7 @@ bem.loadings
 ```
 
 ```{r}
-extreme_2 %>% left_join(bem.loadings) %>% arrange(desc(abs(Factor2)))
+extreme_2 %>% left_join(bem.loadings) %>% arrange(desc(abs(Factor2))) %>% select(-trait)
 ```
 
 Subject 755 scores highly on these traits (and even low on "masculine" with negative loading!)
@@ -374,7 +375,8 @@ Repeat with factor 1: 404 high and 708 low:
 
 ```{r}
 bem %>% filter(subno %in% c(404, 708)) %>% gather(trait, score, -subno) %>% spread(subno, score) %>% 
-  left_join(bem.loadings) %>% arrange(desc(abs(Factor1)))
+  left_join(bem.loadings) %>% arrange(desc(abs(Factor1))) %>% 
+  select(-trait)
 ```
 
 subject 404 is a high scorer on everything (and a low scorer on "shy" with negative loading)
@@ -410,7 +412,7 @@ high_loadings=function(factor_name) {
 then do it for any factor
 
 ```{r}
-factor_name="Factor15"
+factor_name="Factor4"
 high_loadings(factor_name)
 ```
 
@@ -511,7 +513,7 @@ this is degrees C per year. Doesn't seem like much, but over 130 years of data i
 This assumes that the rate of change is same over all years, but trend seemed to be accelerating:
 
 ```{r}
-ggplot(temp, aes(x=year, y=temperature)) + geom_point() + geom_smooth()
+ggplot(temp, aes(x=year, y=temperature)) + geom_point() + geom_line()
 ```
 
 Look at pre-1970 and post-1970:
@@ -523,6 +525,10 @@ temp %>% mutate(time_period=ifelse(year<=1970, "pre-1970", "post-1970")) %>%
 ```
 
 Theil-Sen slope is very nearly *four times* as big since 1970 vs. before.
+
+```{r}
+0.0168*50
+```
 
 ## Actual time series
 
