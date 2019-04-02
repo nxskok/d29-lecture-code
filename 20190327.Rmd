@@ -252,7 +252,7 @@ Side track: make a lookup table. First need all (distinct) short names:
 bem %>% gather(trait, score, -subno) %>% distinct(trait) %>% write_csv("traits.csv")
 ```
 
-then open `traits.csv` with spreadsheet, add new column with full traits in `trait_full`.
+then open `traits.csv` as spreadsheet, add new column with full traits in `trait_full`.
 
 then read this back in:
 
@@ -396,21 +396,21 @@ bem.loadings
 ```
 
 ```{r}
-bem.loadings %>% gather(factor, score, starts_with("Factor")) -> loadings.long
+bem.loadings %>% gather(factor, loading, starts_with("Factor")) -> loadings.long
 loadings.long
 ```
 
 ```{r}
 high_loadings=function(factor_name) {
   loadings.long %>% filter(factor==factor_name) %>% 
-  arrange(desc(abs(score)))
+  arrange(desc(abs(loading)))
 }
 ```
 
 then do it for any factor
 
 ```{r}
-factor_name="Factor15"
+factor_name="Factor8"
 high_loadings(factor_name)
 ```
 
