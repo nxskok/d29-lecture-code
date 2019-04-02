@@ -1,0 +1,808 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(ggfortify)
+library(forecast)
+```
+
+
+## Actual time series
+
+### The Kings of England
+
+* Age at death of Kings and Queens of England since William the Conqueror (1066):
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/kings.txt"
+kings=read_table(my_url, col_names=F)
+kings.ts=ts(kings)
+```
+
+Data in one long column `X1`, so `kings` is data frame with one column. Turn into `ts` time series object.
+
+```{r}
+kings.ts
+```
+
+
+### Plotting a time series
+
+`autoplot` from `ggfortify` gives time plot:
+
+```{r,"Kings-Time-Series2"}
+autoplot(kings.ts)
+```
+
+Comments
+
+* "Time" here is order of monarch from William the Conqueror (1st) to George VI (last).
+
+* Looks to be slightly increasing trend of age-at-death
+
+* but lots of irregularity.
+
+
+### Stationarity
+
+A time series is **stationary** if:
+
+* mean is constant over time
+* variability constant over time and not changing with mean.
+
+Kings time series seems to have:
+
+* non-constant mean
+* but constant variability
+* not stationary.
+
+Usual fix for non-stationarity is *differencing*: new series 2nd - 1st, 3rd - 2nd etc.
+
+In R, `diff`:
+
+```{r}
+kings.diff.ts=diff(kings.ts)
+```
+
+Did differencing fix stationarity?
+
+Looks stationary now:
+
+```{r, "Differenced-Kings-Series"}
+autoplot(kings.diff.ts)
+```
+
+
+
+### Births per month in New York City
+
+from January 1946 to December 1959:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/nybirths.txt"
+ny=read_table(my_url,col_names=F)
+ny.ts=ts(ny,freq=12,start=c(1946,1))
+ny.ts
+```
+
+Note extras on `ts`:
+
+* Time period is 1 year
+* 12 observations per year (monthly) in `freq`
+* First observation is 1st month of 1946 in `start`
+
+Printing formats nicely.
+
+Time plot
+
+* Time plot shows extra pattern:
+
+```{r,fig.cap=""}
+autoplot(ny.ts)
+```
+
+Comments on time plot
+
+* steady increase (after initial drop)
+* repeating pattern each year (seasonal component).
+* Not stationary.
+
+Differencing the New York births
+
+Does differencing help here?
+
+```{r}
+ny.diff.ts=diff(ny.ts)
+autoplot(ny.diff.ts)
+```
+
+Looks stationary, but some regular spikes.
+
+### Decomposing a seasonal time series
+
+Observations for NY births were every month. Are things the same every year?
+
+A visual (using original data):
+
+```{r fig.height=12, fig.width=12}
+ny.d=decompose(ny.ts) 
+autoplot(ny.d)
+```
+
+Decomposition bits
+
+
+Shows:
+
+* original series
+* a "seasonal" part: something that repeats every year
+* just the trend, going steadily up (except at the start)
+* random: what is left over ("remainder")
+
+The seasonal part
+
+Fitted seasonal part is same every year, births lowest in February and highest in July:
+
+
+```{r}
+ny.d$seasonal
+```
+
+
+```{r, echo=FALSE}
+set.seed(457299)
+```
+
+## Time series basics
+
+### White noise
+
+Independent random normal. Knowing one value tells you nothing about the next. "Random" process.
+
+
+```{r,"White-Noise"}
+wn=rnorm(100)
+wn.ts=ts(wn)
+autoplot(wn.ts)
+```
+
+
+
+
+### Lagging a time series
+
+This means moving a time series one (or more) steps back in time:
+
+```{r}
+x=rnorm(5)
+tibble(x) %>% mutate(x_lagged=lag(x)) -> with_lagged
+with_lagged
+```
+
+Gain a missing because there is nothing before the first observation.
+
+Lagging white noise
+
+```{r}
+tibble(wn) %>% mutate(wn_lagged=lag(wn)) -> wn_with_lagged
+ggplot(wn_with_lagged, aes(y=wn, x=wn_lagged))+geom_point()
+with(wn_with_lagged, cor.test(wn, wn_lagged, use="c")) # ignore the missing value
+```
+
+
+Correlation with lagged series
+
+If you know about white noise at one time point, you know *nothing* about it at the next. This is shown by the scatterplot and the correlation. 
+
+
+On the other hand, this:
+
+```{r}
+tibble(age=kings$X1) %>% 
+  mutate(age_lagged=lag(age)) -> kings_with_lagged
+with(kings_with_lagged, cor.test(age, age_lagged))
+```
+
+If one value larger, the next value (a bit) more likely to be larger:
+
+```{r}
+ggplot(kings_with_lagged, aes(x=age_lagged, y=age)) + geom_point()
+```
+
+Two steps back:
+
+```{r}
+kings_with_lagged %>% 
+  mutate(age_lag_2=lag(age_lagged)) %>% 
+  with(., cor.test(age, age_lag_2))
+```
+
+Still a correlation two steps back, but smaller (and no longer significant).
+
+### Autocorrelation
+
+Correlation of time series with *itself* one, two,... time steps back is useful idea, called **autocorrelation**. Make a plot of it with `acf` and `autoplot`:
+
+White noise:
+
+```{r}
+acf(wn.ts, plot=F) %>% autoplot()
+```
+
+No autocorrelations beyond chance, anywhere.
+
+Autocorrelations work best on *stationary* series.
+
+Kings, differenced
+
+```{r}
+acf(kings.diff.ts, plot=F) %>% autoplot()
+```
+
+Comments on autocorrelations of kings series
+
+Negative autocorrelation at lag 1, nothing beyond that. 
+
+* If one value of differenced series positive, next one most likely negative.
+* If one king lives longer than predecessor, next one likely lives shorter. (Careful with interpretation: is of *differences* in age-at-death.)
+
+NY births, differenced
+
+```{r}
+acf(ny.diff.ts, plot=F) %>% autoplot()
+```
+
+Lots of stuff:
+
+* large positive autocorrelation at 1.0 years (July one year like July last year)
+* large negative autocorrelation at 1 month.
+* smallish but significant negative autocorrelation at 0.5 year = 6 months.
+* Other stuff -- complicated.
+
+### Souvenir sales
+
+Monthly sales for a beach souvenir shop in Queensland, Australia:
+
+```{r}
+
+my_url="https://www.utsc.utoronto.ca/~butler/d29/souvenir.txt"
+souv=read_table(my_url, col_names=F)
+souv.ts=ts(souv,frequency=12,start=1987)
+souv.ts
+```
+
+Plot of souvenir sales
+
+```{r}
+autoplot(souv.ts)
+```
+
+Several problems:
+
+* Mean goes up over time
+* Variability gets larger as mean gets larger
+* Not stationary
+
+Problem-fixing:
+
+Fix non-constant variability first by taking logs:
+
+```{r}
+souv.log.ts=log(souv.ts)
+autoplot(souv.log.ts)
+```
+
+Mean still not constant, so try taking differences:
+
+```{r}
+souv.log.diff.ts=diff(souv.log.ts)
+autoplot(souv.log.diff.ts)
+```
+
+* Now stationary
+* but clear seasonal effect.
+
+Decomposing to see the seasonal effect
+
+```{r fig.height=12, fig.width=12}
+souv.d=decompose(souv.log.diff.ts)
+autoplot(souv.d)
+```
+
+**Big** drop in one month's differences. Look at seasonal component to see which:
+
+```{r}
+souv.d$seasonal
+```
+
+January.
+
+Autocorrelations:
+
+```{r}
+acf(souv.log.diff.ts, plot=F) %>% autoplot()
+```
+
+* Big positive autocorrelation at 1 year (strong seasonal effect)
+* Small negative autocorrelation at 1 and 2 months.
+
+
+### Moving average
+
+A particular type of time series called a **moving average** or MA process captures idea of autocorrelations at a few lags but not at others.
+
+Here's generation of MA(1) process, with autocorrelation at lag 1 but not otherwise:
+
+```{r}
+beta=1
+tibble(e=rnorm(100)) %>% 
+  mutate(e_lag=lag(e)) %>% 
+  mutate(y=e+beta*e_lag) %>% 
+  mutate(y=ifelse(is.na(y), 0, y)) -> ma
+ma
+```
+
+
+* `e` contains independent "random shocks". 
+* Start process at 0. 
+* Then, each value of the time series has that time's random shock, plus a multiple of the last time's random shock. 
+* `y[i]` has shock in common with `y[i-1]`; should be a lag 1 autocorrelation. 
+* But `y[i]` has no shock in common with `y[i-2]`, so no lag 2 autocorrelation (or beyond).
+
+```{r}
+autoplot(ts(ma$y))
+```
+
+
+ACF for MA(1) process
+
+```{r}
+acf(ma$y, plot=F, na.rm=T) %>% autoplot()
+```
+
+Everything beyond lag 1 appears to be just chance.
+
+
+### AR process
+
+Another kind of time series is AR process, where each value depends on previous one, like this (loop):
+
+```{r}
+e=rnorm(100)
+x=numeric(0)
+x[1]=0
+alpha=0.7
+for (i in 2:100)
+{
+  x[i]=alpha*x[i-1]+e[i]
+}
+x
+```
+
+```{r}
+autoplot(ts(x))
+```
+
+
+* Each random shock now only used for its own value of `x`
+* but `x[i]` also depends on previous value `x[i-1]`
+* so correlated with previous value
+* *but* `x[i]` also contains multiple of `x[i-2]` and previous x's
+* so all x's correlated, but autocorrelation dying away.
+
+ACF for AR(1) series:
+
+```{r}
+acf(x, plot=F) %>% autoplot()
+```
+
+You can have a series with both AR and MA parts:
+
+```{r}
+arma=arima.sim(list(ar=c(0.6, 0.2),ma=1), n=100)
+autoplot(arma)
+```
+
+```{r}
+acf(arma)
+```
+
+
+### The new way of doing time series analysis (in R)
+
+* Transform series if needed to get constant variability
+* Use package `forecast`.
+* Use function `auto.arima` to estimate what kind of series best fits data.
+* Use `forecast` to see what will happen in future.
+
+Anatomy of `auto.arima` output
+
+```{r}
+auto.arima(ma$y)
+```
+
+* ARIMA part tells you what kind of series you are estimated to have:
+  * first number (first 0) is AR (autoregressive) part
+  * second number (second 0) is amount of differencing
+  * third number (1) is MA (moving average) part
+  
+* Below that, coefficients (with SEs)
+* AICc is measure of fit (lower better)
+
+
+### Doing it all the new way
+
+#### White noise
+
+```{r}
+wn.aa=auto.arima(wn.ts)
+wn.aa
+```
+
+Best fit *is* white noise (no AR, no MA, no differencing). 
+
+Forecasts:
+
+```{r}
+forecast(wn.aa)
+```
+
+Forecasts all 0, since the past doesn't help to predict future.
+
+
+#### MA(1)
+
+```{r}
+y.aa=auto.arima(ma$y)
+y.aa
+y.f=forecast(y.aa)
+```
+
+Plotting the forecasts for MA(1):
+
+```{r}
+autoplot(y.f)
+```
+
+
+#### AR(1)
+
+```{r}
+x.aa=auto.arima(x)
+x.aa
+```
+
+Oops!
+
+Got it wrong! Fit right AR(1) model:
+
+```{r}
+x.arima=arima(x,order=c(1,0,0))
+x.arima
+```
+
+Forecasts for `x`:
+
+```{r}
+forecast(x.arima) %>% autoplot()
+```
+
+
+#### Kings
+
+```{r}
+kings.aa=auto.arima(kings.ts)
+kings.aa
+```
+
+Kings forecasts:
+
+```{r}
+kings.f=forecast(kings.aa)
+autoplot(kings.f) + labs(x="index", y= "age at death")
+```
+
+
+#### NY births
+
+
+```{r}
+ny.aa=auto.arima(ny.ts)
+ny.aa
+ny.f=forecast(ny.aa,h=36)
+```
+
+Going 36 time periods (3 years) into future.
+
+Plotting the forecasts:
+
+```{r}
+autoplot(ny.f)+labs(x="time", y="births")
+```
+
+
+#### Log-souvenir sales
+
+```{r}
+souv.aa=auto.arima(souv.log.ts)
+souv.aa
+souv.f=forecast(souv.aa,h=27)
+```
+
+
+
+Plotting the forecasts
+
+```{r}
+autoplot(souv.f)
+```
+
+
+#### Global mean temperatures, revisited
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/temperature.csv"
+temp=read_csv(my_url)
+
+```
+
+
+```{r}
+temp.ts=ts(temp$temperature,start=1880)
+temp.aa=auto.arima(temp.ts)
+temp.aa
+```
+
+Forecasts
+
+```{r fig.height=9, fig.width=9}
+temp.f=forecast(temp.aa)
+autoplot(temp.f)+labs(x="year", y="temperature")
+```
+
+
+## Multi-way frequency tables
+
+
+### Wearing glasses
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/eyewear.txt"
+eyewear=read_delim(my_url," ")
+eyewear
+```
+
+Tidying
+
+```{r}
+eyewear %>%
+  gather(eyewear,frequency,contacts:none) -> eyes
+eyes
+```
+
+this is ready for modelling.
+
+Making subtables from long data, eg:
+
+```{r}
+xtabs(frequency~gender,data=eyes) %>% 
+  prop.table()
+```
+
+There were more females than males here.
+
+Modelling procedure:
+
+- fit initial model
+- see what you can remove
+- remove and refit
+- repeat until have to stop.
+- investigate.
+
+Initial model:
+
+```{r}
+eyes.1=glm(frequency~gender*eyewear,data=eyes,
+  family="poisson")
+```
+
+See what you can remove:
+
+```{r}
+drop1(eyes.1, test="Chisq")
+```
+
+We have to stop. 
+
+This means that there is an association between gender and eyewear.
+
+To investigate:
+
+```{r}
+xtabs(frequency~gender+eyewear, data=eyes) %>% prop.table(margin=1)
+```
+
+More of the females wore contacts than males; more of the males wore glasses.
+
+Suppose the table had been this:
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/eyewear2.txt"
+eyewear2=read_table(my_url)
+eyewear2
+```
+
+About the same proportion of each gender wore each kind of eyewear:
+
+```{r}
+eyewear2 %>% gather(eyewear,frequency,contacts:none) -> eyes2
+xtabs(frequency~gender+eyewear,data=eyes2) %>% prop.table(margin=1)
+```
+
+so there should be no association:
+
+```{r}
+eyes.2=glm(frequency~gender*eyewear,data=eyes2,
+  family="poisson")
+drop1(eyes.2,test="Chisq")
+```
+
+drop the interaction:
+
+```{r}
+eyes.3=update(eyes.2,.~.-gender:eyewear)
+drop1(eyes.3,test="Chisq")
+```
+
+- gender effect (more females)
+- eyewear effect (fewer people wore glasses)
+
+### Chest pain, being overweight and being a smoker
+
+slide 670
+
+Data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/ecg.txt"
+chest=read_delim(my_url," ")
+chest
+```
+
+Away we go:
+
+```{r}
+chest.1=glm(count~ecg*bmi*smoke, data=chest, family="poisson")
+drop1(chest.1,test="Chisq")
+```
+
+remove this interaction, and check again
+
+```{r}
+chest.2=update(chest.1,.~.-ecg:bmi:smoke)
+drop1(chest.2,test="Chisq")
+```
+
+remove `bmi:smoke`
+
+```{r}
+chest.3=update(chest.2,.~.-bmi:smoke)
+drop1(chest.3,test="Chisq")
+```
+
+Done.
+
+`ecg` was outcome here:
+
+Investigate `ecg`-`bmi`:
+
+```{r}
+xtabs(count~ecg+bmi, data=chest) %>% 
+  prop.table(margin=2)
+```
+
+Most of the normal weight people had normal ECG; over 50% of the overweight people had abnormal ECG.
+
+Then `ecg` - `smoke`:
+
+```{r}
+xtabs(count~ecg+smoke, data=chest) %>% 
+  prop.table(margin=2)
+```
+
+Similar story: most of the non-smokers had normal ECG, but near 50% of smokers had abnormal ECG.
+
+### Simpson’s paradox: the airlines example
+
+slide 677
+
+arranging the data
+
+```{r}
+my_url="http://www.utsc.utoronto.ca/~butler/d29/airlines.txt"
+airlines=read_table2(my_url)
+airlines
+```
+
+```{r}
+(airlines %>%
+  gather(line.status,freq, contains("_")) %>%
+  separate(line.status,c("airline","status")) -> punctual)
+```
+
+Proportions delayed by airline
+
+```{r}
+xtabs(freq~airline+status,data=punctual) %>% 
+  prop.table(margin=1)
+```
+
+Alaska Airlines delayed 13.3% of time, America West 10.8%.
+
+For each airline at each airport:
+
+```{r}
+xtabs(freq~airline+status+airport,data=punctual) %>% 
+  prop.table(margin=c(1,3))
+```
+
+America West delayed more of the time at every single airport, but less overall???
+
+(slide 682)
+
+How is this possible?
+
+Do a log-linear analysis and see what happens:
+
+```{r}
+punctual.1=glm(freq~airport*airline*status,
+data=punctual,family="poisson")
+drop1(punctual.1,test="Chisq")
+```
+
+Drop 3-way interaction:
+
+```{r}
+punctual.2=update(punctual.1,~.-airport:airline:status)
+drop1(punctual.2,test="Chisq")
+```
+
+Now done. Three two-way associations to investigate.
+
+`status` is response, so use other one as margin.
+
+Airline by status:
+
+```{r}
+xtabs(freq~airline+status,data=punctual) %>% 
+  prop.table(margin=1)
+```
+
+As before.
+
+Airport by status:
+
+```{r}
+xtabs(freq~airport+status,data=punctual) %>% 
+  prop.table(margin=1)
+```
+
+Flights into San Francisco and Seattle often delayed, flights into Phoenix usually on time.
+
+Airport by airline:
+
+```{r}
+xtabs(freq~airport+airline,data=punctual) %>% 
+  prop.table(margin=2)
+```
+
+Most of Alaska Airlines' flights into Seattle, most of America West's flights into Phoenix.
+
+The resolution (slide 688):
+
+America West flies into Phoenix, where it is easy to be on time; Alaska Airlines flies into Seattle, where it is hard to be on time. But when you compare apples with apples, Alaska Airlines comes out better: airports are very different, so don't aggregate over them; consider each one singly.
